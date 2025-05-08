@@ -1,0 +1,99 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
+// Pages
+import Home from './pages/Home';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ResetPassword from './pages/ResetPassword';
+import Dashboard from './pages/Dashboard';
+import Cart from './pages/Cart';
+import PaymentPage from './pages/PaymentPage';
+import Tools from './pages/Tools';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
+import RefundPolicy from './pages/RefundPolicy';
+import NotFound from './pages/NotFound';
+import ToolAccess from './pages/ToolAccess';
+import Admin from './pages/Admin';
+import AdminLogin from './pages/AdminLogin';
+
+// Components
+import Navbar from './components/layout/Navbar';
+import Footer from './components/layout/Footer';
+import MainLayout from './components/layout/MainLayout';
+import AuthGuard from './components/auth/AuthGuard';
+import AdminGuard from './components/auth/AdminGuard';
+import SessionManager from './components/SessionManager';
+import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
+import { ToastProvider } from './context/ToastContext';
+
+function App() {
+  return (
+    <ToastProvider>
+      <Router>
+        <AuthProvider>
+          <CartProvider>
+            {/* Session timeout manager */}
+            <SessionManager />
+            <MainLayout>
+              <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 text-gray-100 flex flex-col">
+                <Navbar />
+                <main className="flex-grow">
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/signup" element={<Signup />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
+                    <Route path="/tools" element={<Tools />} />
+                    <Route 
+                      path="/dashboard" 
+                      element={
+                        <AuthGuard>
+                          <Dashboard />
+                        </AuthGuard>
+                      } 
+                    />
+                    <Route 
+                      path="/tool/:toolId" 
+                      element={
+                        <AuthGuard>
+                          <ToolAccess />
+                        </AuthGuard>
+                      } 
+                    />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route 
+                      path="/payment" 
+                      element={
+                        <AuthGuard>
+                          <PaymentPage />
+                        </AuthGuard>
+                      } 
+                    />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/refund" element={<RefundPolicy />} />
+                    <Route path="/admin/login" element={<AdminLogin />} />
+                    <Route
+                      path="/admin/*"
+                      element={
+                        <AdminGuard>
+                          <Admin />
+                        </AdminGuard>
+                      }
+                    />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </main>
+                <Footer />
+              </div>
+            </MainLayout>
+          </CartProvider>
+        </AuthProvider>
+      </Router>
+    </ToastProvider>
+  );
+}
+
+export default App;
