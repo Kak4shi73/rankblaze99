@@ -15,7 +15,8 @@ exports.verifyCashfreePayment = cashfreeFunctions.verifyCashfreePayment;
 exports.api = cashfreeFunctions.api;
 exports.cashfreeWebhook = cashfreeFunctions.cashfreeWebhook;
 
-// Re-export existing functions (if they exist)
+// Comment out the attempt to re-export existing functions to avoid TypeScript errors
+/*
 try {
   const existingFunctions = require('./lib/index');
   for (const key in existingFunctions) {
@@ -25,4 +26,5 @@ try {
   }
 } catch (error) {
   console.warn('Could not re-export existing functions:', error.message);
-} 
+}
+*/ 
