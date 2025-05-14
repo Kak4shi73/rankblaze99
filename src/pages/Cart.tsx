@@ -8,10 +8,10 @@ import CurrencySelector from '../components/cart/CurrencySelector';
 import { Currency, convertCurrency, formatCurrency } from '../utils/currencyConverter';
 import { createOrder } from '../utils/cashfree';
 import { db } from '../config/firebase';
-import { ref, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 
 const Cart = () => {
-  const { cartItems, removeFromCart, clearCart } = useCart();
+  const { cartItems, removeFromCart, clearCart, pendingOrderId, isCreatingOrder: isPreparingOrder } = useCart();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -52,60 +52,91 @@ const Cart = () => {
         throw new Error('Payment gateway not available. Please try again later.');
       }
       
-      // Generate a unique order ID
-      const uniqueOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      let orderId = pendingOrderId;
+      let paymentSessionId = null;
       
-      // Create an order in Cashfree
-      const orderOptions = {
-        amount: Math.round(total * 100) / 100, // Ensure proper rounding
-        currency: 'INR',
-        customerName: user?.name || '',
-        customerPhone: '9999999999', // Using a default phone
-        customerEmail: user?.email || '',
-        notes: {
-          userId: user?.id || '',
-          items: JSON.stringify(cartItems.map(item => ({ id: item.id, name: item.name })))
+      // If we have a pending order ID, try to use it
+      if (orderId) {
+        try {
+          // Get the existing order from the database
+          const orderRef = ref(db, `orders/${orderId}`);
+          const orderSnapshot = await get(orderRef);
+          
+          if (orderSnapshot.exists()) {
+            const orderData = orderSnapshot.val();
+            // Check if the order has a payment session ID and is still valid
+            if (orderData.paymentSessionId) {
+              paymentSessionId = orderData.paymentSessionId;
+              console.log('Using existing order:', orderId, 'with session:', paymentSessionId);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching existing order:', error);
+          // If there's an error, we'll create a new order below
+          orderId = null;
         }
-      };
-      
-      console.log('Creating order with options:', orderOptions);
-      
-      // Save pending order to database
-      const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
-      await set(pendingOrderRef, {
-        userId: user?.id,
-        amount: Math.round(total * 100) / 100,
-        items: cartItems,
-        status: 'pending',
-        paymentMethod: 'cashfree',
-        createdAt: new Date().toISOString(),
-      });
-      
-      // Create order with Cashfree
-      const order = await createOrder(orderOptions);
-      console.log('Order created:', order);
-      
-      if (!order || !order.payment_session_id) {
-        throw new Error('Failed to create order. Please try again.');
       }
       
-      // Update order with payment session ID
-      await set(pendingOrderRef, {
-        userId: user?.id,
-        amount: Math.round(total * 100) / 100,
-        items: cartItems,
-        status: 'payment_initiated',
-        paymentMethod: 'cashfree',
-        orderId: order.orderId,
-        paymentSessionId: order.payment_session_id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      // If we don't have a valid order yet, create a new one
+      if (!orderId || !paymentSessionId) {
+        // Generate a unique order ID
+        const uniqueOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        orderId = uniqueOrderId;
+        
+        // Create an order in Cashfree
+        const orderOptions = {
+          amount: Math.round(total * 100) / 100, // Ensure proper rounding
+          currency: 'INR',
+          customerName: user?.name || '',
+          customerPhone: user?.phone || '9999999999', // Using a default phone
+          customerEmail: user?.email || '',
+          notes: {
+            userId: user?.id || '',
+            items: JSON.stringify(cartItems.map(item => ({ id: item.id, name: item.name })))
+          }
+        };
+        
+        console.log('Creating new order with options:', orderOptions);
+        
+        // Save pending order to database
+        const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
+        await set(pendingOrderRef, {
+          userId: user?.id,
+          amount: Math.round(total * 100) / 100,
+          items: cartItems,
+          status: 'pending',
+          paymentMethod: 'cashfree',
+          createdAt: new Date().toISOString(),
+        });
+        
+        // Create order with Cashfree
+        const order = await createOrder(orderOptions);
+        console.log('Order created:', order);
+        
+        if (!order || !order.payment_session_id) {
+          throw new Error('Failed to create order. Please try again.');
+        }
+        
+        paymentSessionId = order.payment_session_id;
+        
+        // Update order with payment session ID
+        await set(pendingOrderRef, {
+          userId: user?.id,
+          amount: Math.round(total * 100) / 100,
+          items: cartItems,
+          status: 'payment_initiated',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          paymentSessionId: order.payment_session_id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
       
       showToast('Redirecting to payment gateway...', 'success');
       
       // Initialize and open Cashfree checkout
-      const cashfree = new window.Cashfree(order.payment_session_id);
+      const cashfree = new window.Cashfree(paymentSessionId);
       
       // Handle payment events
       cashfree.on('payment_success', async (data: any) => {
@@ -113,13 +144,13 @@ const Cart = () => {
         showToast('Payment successful!', 'success');
         
         // Update order status
-        await set(ref(db, `orders/${uniqueOrderId}`), {
+        await set(ref(db, `orders/${orderId}`), {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
           status: 'completed',
           paymentMethod: 'cashfree',
-          orderId: order.orderId,
+          orderId: orderId,
           paymentId: `cf_${Date.now()}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -138,13 +169,13 @@ const Cart = () => {
         setIsCheckingOut(false);
         
         // Update order status
-        set(ref(db, `orders/${uniqueOrderId}`), {
+        set(ref(db, `orders/${orderId}`), {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
           status: 'failed',
           paymentMethod: 'cashfree',
-          orderId: order.orderId,
+          orderId: orderId,
           errorMessage: data.error?.reason || 'Unknown error',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -157,13 +188,13 @@ const Cart = () => {
         setIsCheckingOut(false);
         
         // Update order status
-        set(ref(db, `orders/${uniqueOrderId}`), {
+        set(ref(db, `orders/${orderId}`), {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
           status: 'cancelled',
           paymentMethod: 'cashfree',
-          orderId: order.orderId,
+          orderId: orderId,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -293,15 +324,18 @@ const Cart = () => {
                 <div className="flex flex-col gap-4">
                   <button
                     onClick={handleCheckout}
-                    disabled={cartItems.length === 0 || isCheckingOut}
+                    disabled={cartItems.length === 0 || isCheckingOut || isPreparingOrder}
                     className={`w-full flex justify-center items-center py-3 px-4 rounded-lg text-white font-medium transition-all duration-300 ${
-                      cartItems.length === 0 || isCheckingOut
+                      cartItems.length === 0 || isCheckingOut || isPreparingOrder
                         ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                         : 'bg-gradient-to-r from-amber-400 to-amber-600 text-gray-900 hover:shadow-lg hover:shadow-amber-500/30'
                     }`}
                   >
-                    {isCheckingOut ? (
-                      <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin"></div>
+                    {isCheckingOut || isPreparingOrder ? (
+                      <>
+                        <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mr-2"></div>
+                        {isPreparingOrder ? 'Preparing...' : 'Processing...'}
+                      </>
                     ) : (
                       <>
                         <CreditCard className="h-5 w-5 mr-2" />
