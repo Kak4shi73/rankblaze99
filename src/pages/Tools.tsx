@@ -6,14 +6,17 @@ import { toolsData } from '../data/tools';
 const Tools = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [filteredTools, setFilteredTools] = useState(toolsData);
+  const [filteredTools, setFilteredTools] = useState(toolsData.filter(tool => !tool.hidden));
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Filter out hidden tools
+  const visibleTools = toolsData.filter(tool => !tool.hidden);
 
   // Get unique categories
-  const categories = ['all', ...new Set(toolsData.map(tool => tool.category || 'uncategorized'))];
+  const categories = ['all', ...new Set(visibleTools.map(tool => tool.category || 'uncategorized'))];
 
   useEffect(() => {
-    const filtered = toolsData.filter(tool => {
+    const filtered = visibleTools.filter(tool => {
       const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           tool.description.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;

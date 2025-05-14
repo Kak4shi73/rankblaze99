@@ -13,6 +13,7 @@ interface Tool {
   icon: any;
   gradient: string;
   category: string;
+  hidden?: boolean;
 }
 
 export const toolsData: Tool[] = [
@@ -29,7 +30,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Bot,
     gradient: 'from-violet-500 to-purple-600',
-    category: 'AI'
+    category: 'AI',
+    hidden: true
   },
   {
     id: 2,
@@ -59,7 +61,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Layout,
     gradient: 'from-blue-500 to-indigo-600',
-    category: 'Design'
+    category: 'Design',
+    hidden: true
   },
   {
     id: 4,
@@ -119,7 +122,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Play,
     gradient: 'from-red-500 to-rose-600',
-    category: 'Entertainment'
+    category: 'Entertainment',
+    hidden: true
   },
   {
     id: 8,
@@ -134,7 +138,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Music,
     gradient: 'from-green-500 to-emerald-600',
-    category: 'Entertainment'
+    category: 'Entertainment',
+    hidden: true
   },
   {
     id: 9,
@@ -149,7 +154,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Play,
     gradient: 'from-red-600 to-pink-600',
-    category: 'Entertainment'
+    category: 'Entertainment',
+    hidden: true
   },
   {
     id: 10,
@@ -224,7 +230,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Book,
     gradient: 'from-blue-600 to-indigo-600',
-    category: 'Education'
+    category: 'Education',
+    hidden: true
   },
   {
     id: 15,
