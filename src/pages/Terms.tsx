@@ -55,12 +55,37 @@ const Terms = () => {
               We reserve the right to terminate or suspend accounts that violate these terms. Users may cancel their subscription at any time, subject to our refund policy.
             </p>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">6. Changes to Terms</h2>
+            <h2 className="text-2xl font-semibold text-white mb-6">6. Limitation of Liability</h2>
+            <p className="text-indigo-200 mb-4">
+              By using this website, you acknowledge and agree that:
+            </p>
+            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
+              <li>RANKBLAZE shall not be held liable for any direct, indirect, incidental, or consequential damages arising from the use or misuse of our products.</li>
+              <li>We are not responsible for allergic reactions or health issues arising from product consumption. Customers are advised to review the ingredients list (available upon request) and consult a physician in case of dietary restrictions.</li>
+              <li>We are not liable for delays, damages, or losses once the product has been handed over to the courier company.</li>
+              <li>In case of events beyond our control (natural disasters, strikes, pandemics, etc.), service disruptions may occur for which we shall not be held accountable.</li>
+            </ul>
+
+            <h2 className="text-2xl font-semibold text-white mb-6">7. Site Access & User Conduct</h2>
+            <p className="text-indigo-200 mb-4">
+              You agree to access and use the website only for lawful purposes. The following activities are strictly prohibited:
+            </p>
+            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
+              <li>Attempting to hack, tamper with, or disrupt website functionality</li>
+              <li>Uploading or distributing any malware, viruses, or harmful content</li>
+              <li>Using the website for fraudulent, abusive, or illegal activities</li>
+              <li>Engaging in automated data collection, such as scraping or data mining</li>
+            </ul>
+            <p className="text-indigo-200 mb-6">
+              Any misuse of the website will lead to immediate suspension of access, and may result in legal prosecution under applicable laws.
+            </p>
+
+            <h2 className="text-2xl font-semibold text-white mb-6">8. Changes to Terms</h2>
             <p className="text-indigo-200 mb-6">
               RANKBLAZE may modify these terms at any time. Continued use of our services after changes constitutes acceptance of the new terms.
             </p>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">7. Contact</h2>
+            <h2 className="text-2xl font-semibold text-white mb-6">9. Contact</h2>
             <p className="text-indigo-200">
               For questions about these terms, please contact us at aryansingh2611@outlook.com
             </p>
