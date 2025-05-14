@@ -2,6 +2,12 @@ const functions = require('firebase-functions');
 const express = require('express');
 const cors = require('cors');
 const Cashfree = require('cashfree-pg-sdk-nodejs');
+const admin = require('firebase-admin');
+
+// Initialize Firebase Admin SDK if not already initialized
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 // Express app for HTTP endpoints
 const app = express();
@@ -105,6 +111,32 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
     const response = await Cashfree.PG.orders.create(orderRequest);
     console.log('Cashfree order created successfully:', response);
 
+    // Save order to Firestore
+    await admin.firestore().collection('orders').doc(response.order_id).set({
+      order_id: response.order_id,
+      payment_session_id: response.payment_session_id,
+      amount: response.order_amount,
+      currency: response.order_currency,
+      customer_name: orderRequest.customer_details.customer_name,
+      customer_email: orderRequest.customer_details.customer_email,
+      customer_phone: orderRequest.customer_details.customer_phone,
+      notes: orderNotes,
+      status: 'created',
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Also save to Realtime Database (for backward compatibility)
+    await admin.database().ref(`orders/${response.order_id}`).set({
+      userId: context.auth?.uid || 'anonymous',
+      amount: response.order_amount,
+      status: 'created',
+      paymentMethod: 'cashfree',
+      orderId: response.order_id,
+      paymentSessionId: response.payment_session_id,
+      createdAt: new Date().toISOString(),
+    });
+
     // Return the order details to the client
     return {
       orderId: response.order_id,
@@ -159,6 +191,32 @@ app.post('/createCashfreeOrder', async (req, res) => {
     const response = await Cashfree.PG.orders.create(orderRequest);
     console.log('Cashfree order created successfully via HTTP:', response);
 
+    // Save order to Firestore
+    await admin.firestore().collection('orders').doc(response.order_id).set({
+      order_id: response.order_id,
+      payment_session_id: response.payment_session_id,
+      amount: response.order_amount,
+      currency: response.order_currency,
+      customer_name: orderRequest.customer_details.customer_name,
+      customer_email: orderRequest.customer_details.customer_email,
+      customer_phone: orderRequest.customer_details.customer_phone,
+      notes: notes,
+      status: 'created',
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Also save to Realtime Database (for backward compatibility)
+    await admin.database().ref(`orders/${response.order_id}`).set({
+      userId: notes.userId || 'anonymous',
+      amount: response.order_amount,
+      status: 'created',
+      paymentMethod: 'cashfree',
+      orderId: response.order_id,
+      paymentSessionId: response.payment_session_id,
+      createdAt: new Date().toISOString(),
+    });
+
     // Set proper CORS headers
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -209,6 +267,23 @@ exports.verifyCashfreePayment = functions.https.onCall(async (data, context) => 
       parseFloat(payment.payment_amount) === parseFloat(orderAmount)
     );
 
+    // Update order status in Firestore if payment is successful
+    if (isSuccessful) {
+      await admin.firestore().collection('orders').doc(orderId).update({
+        status: 'completed',
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        payment_verified: true,
+        payment_details: response
+      });
+      
+      // Also update Realtime Database (for backward compatibility)
+      await admin.database().ref(`orders/${orderId}`).update({
+        status: 'completed',
+        paymentVerified: true,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
     return { isValid: isSuccessful };
   } catch (error) {
     console.error('Error verifying Cashfree payment:', error);
@@ -243,6 +318,23 @@ app.post('/verifyCashfreePayment', async (req, res) => {
       payment.payment_status === 'SUCCESS' && 
       (orderAmount ? parseFloat(payment.payment_amount) === parseFloat(orderAmount) : true)
     );
+
+    // Update order status in Firestore if payment is successful
+    if (isSuccessful) {
+      await admin.firestore().collection('orders').doc(orderId).update({
+        status: 'completed',
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        payment_verified: true,
+        payment_details: response
+      });
+      
+      // Also update Realtime Database (for backward compatibility)
+      await admin.database().ref(`orders/${orderId}`).update({
+        status: 'completed',
+        paymentVerified: true,
+        updatedAt: new Date().toISOString()
+      });
+    }
 
     // Set proper CORS headers
     res.set('Access-Control-Allow-Origin', '*');
@@ -287,8 +379,24 @@ exports.cashfreeWebhook = functions.https.onRequest(async (req, res) => {
     // Process different event types
     if (event.data && event.data.payment && event.data.payment.payment_status === 'SUCCESS') {
       // Handle successful payment
-      // Update your database, etc.
-      console.log('Payment successful for order:', event.data.order.order_id);
+      const orderId = event.data.order.order_id;
+      
+      // Update Firestore
+      await admin.firestore().collection('orders').doc(orderId).update({
+        status: 'completed',
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        payment_verified: true,
+        payment_details: event.data.payment
+      });
+      
+      // Update Realtime Database (for backward compatibility)
+      await admin.database().ref(`orders/${orderId}`).update({
+        status: 'completed',
+        paymentVerified: true,
+        updatedAt: new Date().toISOString()
+      });
+      
+      console.log('Payment successful for order:', orderId);
     }
     
     res.status(200).send({ received: true });

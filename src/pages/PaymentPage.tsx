@@ -75,7 +75,7 @@ const PaymentPage = () => {
         amount: total,
         currency: 'INR',
         customerName: user?.name || '',
-        customerPhone: '9999999999', // Using a default phone as it's not stored in User type
+        customerPhone: user?.phone || '9999999999', // Using a default phone as it's not stored in User type
         customerEmail: user?.email || '',
         notes: {
           userId: user?.id || '',
@@ -85,96 +85,107 @@ const PaymentPage = () => {
       
       console.log('Order options:', orderOptions);
       
-      // Save pending order to database
-      const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
-      await set(pendingOrderRef, {
-        userId: user?.id,
-        amount: total,
-        items: cartItems,
-        status: 'pending',
-        paymentMethod: 'cashfree',
-        createdAt: new Date().toISOString(),
-      });
-      
-      // Use Firebase function to create the order securely
-      const order = await createOrder(orderOptions);
-      console.log('Order created:', order);
-      
-      setIsCreatingOrder(false);
-      
-      if (!order || !order.payment_session_id) {
-        throw new Error('Failed to create order. No payment session ID returned.');
-      }
-      
-      // Update order with payment session ID
-      await set(pendingOrderRef, {
-        userId: user?.id,
-        amount: total,
-        items: cartItems,
-        status: 'payment_initiated',
-        paymentMethod: 'cashfree',
-        orderId: order.orderId,
-        paymentSessionId: order.payment_session_id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      
-      showToast('Order created successfully!', 'success');
-      
-      // Initialize Cashfree drop-in checkout
-      const cashfree = new window.Cashfree(order.payment_session_id);
-      
-      // Handle payment events
-      cashfree.on('payment_success', (data: any) => {
-        console.log('Payment success', data);
-        handlePaymentSuccess(order.orderId, order.amount);
-      });
-      
-      cashfree.on('payment_error', (data: any) => {
-        console.error('Payment error', data);
-        setIsProcessing(false);
-        setErrorMessage('Payment failed: ' + (data.error?.reason || 'Unknown error'));
-        showToast('Payment failed', 'error');
-        
-        // Update order status
-        set(ref(db, `orders/${uniqueOrderId}`), {
-          userId: user?.id,
-          amount: total,
-          items: cartItems,
-          status: 'failed',
-          paymentMethod: 'cashfree',
-          orderId: order.orderId,
-          paymentSessionId: order.payment_session_id,
-          errorMessage: data.error?.reason || 'Unknown error',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      });
-      
-      cashfree.on('close', () => {
-        setIsProcessing(false);
-        showToast('Payment cancelled', 'info');
-        
-        // Update order status
-        set(ref(db, `orders/${uniqueOrderId}`), {
-          userId: user?.id,
-          amount: total,
-          items: cartItems,
-          status: 'cancelled',
-          paymentMethod: 'cashfree',
-          orderId: order.orderId,
-          paymentSessionId: order.payment_session_id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      });
-      
-      // Open Cashfree checkout with proper config
       try {
-        cashfree.redirect();
-      } catch (error) {
-        console.error('Error during Cashfree redirect:', error);
-        throw new Error('Unable to open payment gateway. Please try again.');
+        // Save pending order to database
+        const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
+        await set(pendingOrderRef, {
+          userId: user?.id,
+          amount: total,
+          items: cartItems,
+          status: 'pending',
+          paymentMethod: 'cashfree',
+          createdAt: new Date().toISOString(),
+        });
+        
+        // Use Firebase function to create the order securely
+        const order = await createOrder(orderOptions);
+        console.log('Order created:', order);
+        
+        setIsCreatingOrder(false);
+        
+        if (!order || !order.payment_session_id) {
+          throw new Error('Failed to create order. No payment session ID returned.');
+        }
+        
+        // Update order with payment session ID
+        await set(pendingOrderRef, {
+          userId: user?.id,
+          amount: total,
+          items: cartItems,
+          status: 'payment_initiated',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          paymentSessionId: order.payment_session_id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        
+        showToast('Order created successfully!', 'success');
+        
+        // Initialize Cashfree drop-in checkout
+        const cashfree = new window.Cashfree(order.payment_session_id);
+        
+        // Handle payment events
+        cashfree.on('payment_success', (data: any) => {
+          console.log('Payment success', data);
+          handlePaymentSuccess(order.orderId, order.amount);
+        });
+        
+        cashfree.on('payment_error', (data: any) => {
+          console.error('Payment error', data);
+          setIsProcessing(false);
+          setErrorMessage('Payment failed: ' + (data.error?.reason || 'Unknown error'));
+          showToast('Payment failed', 'error');
+          
+          // Update order status
+          set(ref(db, `orders/${uniqueOrderId}`), {
+            userId: user?.id,
+            amount: total,
+            items: cartItems,
+            status: 'failed',
+            paymentMethod: 'cashfree',
+            orderId: order.orderId,
+            paymentSessionId: order.payment_session_id,
+            errorMessage: data.error?.reason || 'Unknown error',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        });
+        
+        cashfree.on('close', () => {
+          setIsProcessing(false);
+          showToast('Payment cancelled', 'info');
+          
+          // Update order status
+          set(ref(db, `orders/${uniqueOrderId}`), {
+            userId: user?.id,
+            amount: total,
+            items: cartItems,
+            status: 'cancelled',
+            paymentMethod: 'cashfree',
+            orderId: order.orderId,
+            paymentSessionId: order.payment_session_id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        });
+        
+        // Open Cashfree checkout with proper config
+        try {
+          cashfree.redirect();
+        } catch (error) {
+          console.error('Error during Cashfree redirect:', error);
+          throw new Error('Unable to open payment gateway. Please try again.');
+        }
+      } catch (fetchError) {
+        console.error('Error fetching or creating order:', fetchError);
+        if (fetchError instanceof Error && fetchError.message.includes('Failed to fetch')) {
+          setErrorMessage('Network error: Unable to connect to the payment server. Please check your internet connection and try again.');
+        } else {
+          setErrorMessage(fetchError instanceof Error ? fetchError.message : 'Failed to create order');
+        }
+        setIsCreatingOrder(false);
+        setIsProcessing(false);
       }
     } catch (error) {
       console.error('Payment initialization error:', error);
@@ -194,13 +205,34 @@ const PaymentPage = () => {
   ) => {
     try {
       showToast('Verifying payment...', 'info');
+      let retries = 0;
+      const maxRetries = 3;
+      let isValid = false;
       
-      // Verify payment status through Firebase Function
-      const isValid = await verifyPaymentStatus(orderId, amount);
+      // Try to verify payment with retries
+      while (retries < maxRetries && !isValid) {
+        try {
+          // Add a small delay between retries
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          
+          // Verify payment status through Firebase Function
+          isValid = await verifyPaymentStatus(orderId, amount);
+          
+          if (isValid) break;
+          retries++;
+        } catch (verifyError) {
+          console.error(`Payment verification attempt ${retries + 1} failed:`, verifyError);
+          retries++;
+          // Continue loop to retry
+        }
+      }
       
       if (!isValid) {
-        showToast('Payment verification failed', 'error');
+        showToast('Payment verification failed. Please contact support with your order ID: ' + orderId, 'error');
         setIsProcessing(false);
+        setErrorMessage('Payment verification failed. Your order ID is: ' + orderId);
         return;
       }
       
@@ -219,42 +251,51 @@ const PaymentPage = () => {
         createdAt: now,
         updatedAt: now
       };
-      await set(paymentRef, paymentData);
-
-      // Create subscriptions for each item
-      for (const item of cartItems) {
-        const subscriptionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 10);
-        const subscriptionRef = ref(db, `subscriptions/${subscriptionId}`);
-        const subscriptionData = {
-          userId: user?.id,
-          productId: item.id,
-          productName: item.name,
-          amount: item.price,
-          paymentId,
-          startDate: now,
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          status: 'active',
-          createdAt: now
-        };
-        await set(subscriptionRef, subscriptionData);
-      }
       
-      // Update order status
-      const orderRef = ref(db, `orders/${orderId}`);
-      await set(orderRef, {
-        userId: user?.id,
-        amount: total,
-        items: cartItems,
-        status: 'completed',
-        paymentMethod: 'cashfree',
-        paymentId: paymentId,
-        createdAt: now,
-        updatedAt: now
-      });
+      try {
+        await set(paymentRef, paymentData);
 
-      setIsProcessing(false);
-      showToast('Payment successful!', 'success');
-      navigate('/dashboard');
+        // Create subscriptions for each item
+        for (const item of cartItems) {
+          const subscriptionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 10);
+          const subscriptionRef = ref(db, `subscriptions/${subscriptionId}`);
+          const subscriptionData = {
+            userId: user?.id,
+            productId: item.id,
+            productName: item.name,
+            amount: item.price,
+            paymentId,
+            startDate: now,
+            endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: 'active',
+            createdAt: now
+          };
+          await set(subscriptionRef, subscriptionData);
+        }
+        
+        // Update order status
+        const orderRef = ref(db, `orders/${orderId}`);
+        await set(orderRef, {
+          userId: user?.id,
+          amount: total,
+          items: cartItems,
+          status: 'completed',
+          paymentMethod: 'cashfree',
+          paymentId: paymentId,
+          createdAt: now,
+          updatedAt: now
+        });
+
+        setIsProcessing(false);
+        showToast('Payment successful!', 'success');
+        navigate('/dashboard');
+      } catch (dbError) {
+        console.error('Error updating database after payment:', dbError);
+        showToast('Payment was successful, but we had trouble updating your account. Please contact support.', 'warning');
+        setIsProcessing(false);
+        // Still navigate to dashboard since payment was successful
+        navigate('/dashboard');
+      }
     } catch (error) {
       console.error('Error processing payment success:', error);
       showToast('Failed to process payment', 'error');
