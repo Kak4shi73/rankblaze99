@@ -7,14 +7,13 @@ import { db } from '../config/firebase';
 import { ref, set } from 'firebase/database';
 import { 
   createOrder,
-  verifyPaymentSignature, 
-  RAZORPAY_KEY_ID 
-} from '../utils/razorpay';
+  verifyPaymentStatus, 
+} from '../utils/cashfree';
 
-type PaymentMethod = 'razorpay';
+type PaymentMethod = 'cashfree';
 
 const PaymentPage = () => {
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('razorpay');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cashfree');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
@@ -45,11 +44,13 @@ const PaymentPage = () => {
       
       showToast('Creating order...', 'info');
       
-      // Create an order in Razorpay - amount in paise (multiply by 100)
+      // Create an order in Cashfree - amount in rupees (Cashfree accepts decimal amount)
       const orderOptions = {
-        amount: Math.round(total * 100), // Ensure the amount is an integer
+        amount: total,
         currency: 'INR',
-        receipt: `receipt_${Date.now()}`,
+        customerName: user?.name || '',
+        customerPhone: '9999999999', // Using a default phone as it's not stored in User type
+        customerEmail: user?.email || '',
         notes: {
           userId: user?.id || '',
           items: JSON.stringify(cartItems.map((item: any) => ({ id: item.id, name: item.name })))
@@ -61,46 +62,35 @@ const PaymentPage = () => {
       
       setIsCreatingOrder(false);
       
-      if (!order || !order.orderId) {
-        throw new Error('Failed to create order. No order ID returned.');
+      if (!order || !order.payment_session_id) {
+        throw new Error('Failed to create order. No payment session ID returned.');
       }
       
       showToast('Order created successfully!', 'success');
       
-      const options = {
-        key: RAZORPAY_KEY_ID,
-        amount: order.amount,
-        currency: order.currency,
-        name: 'Rank Blaze',
-        description: 'Purchase of SEO Tools',
-        image: '/logo.png',
-        order_id: order.orderId,
-        handler: function (response: any) {
-          // Handle successful payment
-          handlePaymentSuccess(
-            response.razorpay_payment_id,
-            response.razorpay_order_id,
-            response.razorpay_signature
-          );
-        },
-        prefill: {
-          name: user?.name || '',
-          email: user?.email || '',
-        },
-        theme: {
-          color: '#4338ca',
-        },
-        modal: {
-          ondismiss: function() {
-            setIsProcessing(false);
-            showToast('Payment cancelled', 'info');
-          }
-        }
-      };
-
-      // Open Razorpay checkout form
-      const razorpayWindow = new (window as any).Razorpay(options);
-      razorpayWindow.open();
+      // Initialize Cashfree drop-in checkout
+      const cashfree = new (window as any).Cashfree(order.payment_session_id);
+      
+      // Handle payment events
+      cashfree.on('payment_success', (data: any) => {
+        console.log('Payment success', data);
+        handlePaymentSuccess(order.orderId, order.amount);
+      });
+      
+      cashfree.on('payment_error', (data: any) => {
+        console.error('Payment error', data);
+        setIsProcessing(false);
+        setErrorMessage('Payment failed: ' + (data.error?.reason || 'Unknown error'));
+        showToast('Payment failed', 'error');
+      });
+      
+      cashfree.on('close', () => {
+        setIsProcessing(false);
+        showToast('Payment cancelled', 'info');
+      });
+      
+      // Open Cashfree checkout
+      cashfree.redirect();
     } catch (error) {
       console.error('Payment initialization error:', error);
       setIsProcessing(false);
@@ -114,15 +104,14 @@ const PaymentPage = () => {
   };
 
   const handlePaymentSuccess = async (
-    paymentId: string,
     orderId: string,
-    signature: string
+    amount: number
   ) => {
     try {
       showToast('Verifying payment...', 'info');
       
-      // Verify payment signature through Firebase Function
-      const isValid = await verifyPaymentSignature(orderId, paymentId, signature);
+      // Verify payment status through Firebase Function
+      const isValid = await verifyPaymentStatus(orderId, amount);
       
       if (!isValid) {
         showToast('Payment verification failed', 'error');
@@ -134,13 +123,13 @@ const PaymentPage = () => {
       const now = new Date().toISOString();
 
       // Create payment record
+      const paymentId = `cf_${Date.now()}`;
       const paymentRef = ref(db, `payments/${paymentId}`);
       const paymentData = {
         userId: user?.id,
         amount: total,
-        razorpayOrderId: orderId,
-        razorpayPaymentId: paymentId,
-        paymentMethod: 'razorpay',
+        orderId: orderId,
+        paymentMethod: 'cashfree',
         status: 'completed',
         createdAt: now,
         updatedAt: now
@@ -190,7 +179,7 @@ const PaymentPage = () => {
           <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
             <div className="p-6 border-b border-gray-700">
               <h1 className="text-2xl font-bold text-white">Complete Payment</h1>
-              <p className="text-indigo-300 mt-1">Secure payment via Razorpay</p>
+              <p className="text-indigo-300 mt-1">Secure payment via Cashfree</p>
             </div>
 
             <div className="p-6">
@@ -204,8 +193,8 @@ const PaymentPage = () => {
                       <CreditCard className="h-6 w-6 text-white" />
                     </div>
                     <div className="ml-4">
-                      <h3 className="text-lg font-semibold text-white">Razorpay</h3>
-                      <p className="text-indigo-300 text-sm">Pay securely with Razorpay</p>
+                      <h3 className="text-lg font-semibold text-white">Cashfree</h3>
+                      <p className="text-indigo-300 text-sm">Pay securely with Cashfree</p>
                     </div>
                     <Check className="h-5 w-5 text-indigo-400 ml-auto" />
                   </div>

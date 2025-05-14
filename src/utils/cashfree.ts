@@ -1,17 +1,13 @@
-import crypto from 'crypto';
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 
-// Razorpay key ID for client-side usage (public key, safe to expose)
-export const RAZORPAY_KEY_ID = 'rzp_test_OChtDbosOz00ju';
-
-// This should be kept secret and only used on the server
-// In a production environment, this would be stored securely on your backend
-const KEY_SECRET = '0A8EfMcUW90DE57mNtffGeqy';
+// Cashfree key ID for client-side usage (public key, safe to expose)
+export const CASHFREE_APP_ID = '9721923531a775ba3e2dcb8259291279';
 
 // Type definitions
-export interface RazorpayOrderResponse {
+export interface CashfreeOrderResponse {
   orderId: string;
+  payment_session_id: string;
   amount: number;
   currency: string;
 }
@@ -31,33 +27,37 @@ const getFunctionsInstance = () => {
 };
 
 /**
- * Creates a new order in Razorpay via Firebase Functions
+ * Creates a new order in Cashfree via Firebase Functions
  */
 export const createOrder = async (options: {
   amount: number;
   currency?: string;
-  receipt?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   notes?: Record<string, string>;
-}): Promise<RazorpayOrderResponse> => {
+}): Promise<CashfreeOrderResponse> => {
   try {
-    console.log('Creating Razorpay order with Firebase function');
+    console.log('Creating Cashfree order with Firebase function');
     const functions = getFunctionsInstance();
-    const createRazorpayOrderFn = httpsCallable<typeof options, RazorpayOrderResponse>(
+    const createCashfreeOrderFn = httpsCallable<typeof options, CashfreeOrderResponse>(
       functions, 
-      'createRazorpayOrder'
+      'createCashfreeOrder'
     );
     
-    const result = await createRazorpayOrderFn({
+    const result = await createCashfreeOrderFn({
       amount: options.amount,
       currency: options.currency || 'INR',
-      receipt: options.receipt || `receipt_${Date.now()}`,
+      customerName: options.customerName,
+      customerPhone: options.customerPhone,
+      customerEmail: options.customerEmail,
       notes: options.notes || {}
     });
     
     console.log('Order created successfully:', result.data);
     return result.data;
   } catch (error: any) {
-    console.error('Razorpay order creation failed:', error);
+    console.error('Cashfree order creation failed:', error);
     
     if (error.code === 'functions/internal' || error.code === 'functions/unavailable') {
       console.error('Using HTTP endpoint as fallback...');
@@ -74,16 +74,17 @@ export const createOrder = async (options: {
 export const createOrderViaHttp = async (options: {
   amount: number;
   currency?: string;
-  receipt?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   notes?: Record<string, string>;
-}): Promise<RazorpayOrderResponse> => {
+}): Promise<CashfreeOrderResponse> => {
   try {
     // Get the region and project ID from Firebase
-    const functions = getFunctionsInstance();
     const region = 'us-central1'; // or your specific region
     const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
     
-    const url = `https://${region}-${projectId}.cloudfunctions.net/createOrder`;
+    const url = `https://${region}-${projectId}.cloudfunctions.net/api/createCashfreeOrder`;
     console.log('Calling HTTP endpoint:', url);
     
     const response = await fetch(url, {
@@ -94,7 +95,9 @@ export const createOrderViaHttp = async (options: {
       body: JSON.stringify({
         amount: options.amount,
         currency: options.currency || 'INR',
-        receipt: options.receipt || `receipt_${Date.now()}`,
+        customerName: options.customerName,
+        customerPhone: options.customerPhone,
+        customerEmail: options.customerEmail,
         notes: options.notes || {}
       })
     });
@@ -106,9 +109,10 @@ export const createOrderViaHttp = async (options: {
 
     const data = await response.json();
     return {
-      orderId: data.orderId,
-      amount: data.amount,
-      currency: data.currency
+      orderId: data.order_id,
+      payment_session_id: data.payment_session_id,
+      amount: data.order_amount,
+      currency: data.order_currency
     };
   } catch (error) {
     console.error('HTTP order creation failed:', error);
@@ -117,33 +121,31 @@ export const createOrderViaHttp = async (options: {
 };
 
 /**
- * Verifies Razorpay payment signature via Firebase Functions
+ * Verifies Cashfree payment status via Firebase Functions
  */
-export const verifyPaymentSignature = async (
+export const verifyPaymentStatus = async (
   orderId: string,
-  paymentId: string,
-  signature: string
+  orderAmount?: number
 ): Promise<boolean> => {
   try {
     const functions = getFunctionsInstance();
-    const verifyRazorpayPaymentFn = httpsCallable<
-      { orderId: string; paymentId: string; signature: string },
+    const verifyCashfreePaymentFn = httpsCallable<
+      { orderId: string; orderAmount?: number },
       { isValid: boolean }
-    >(functions, 'verifyRazorpayPayment');
+    >(functions, 'verifyCashfreePayment');
     
-    const result = await verifyRazorpayPaymentFn({
+    const result = await verifyCashfreePaymentFn({
       orderId,
-      paymentId,
-      signature
+      orderAmount
     });
     
     return result.data.isValid;
   } catch (error: any) {
-    console.error('Signature verification failed:', error);
+    console.error('Payment verification failed:', error);
     
     if (error.code === 'functions/internal' || error.code === 'functions/unavailable') {
       console.error('Using HTTP endpoint as fallback...');
-      return verifyPaymentViaHttp(orderId, paymentId, signature);
+      return verifyPaymentViaHttp(orderId, orderAmount);
     }
     
     return false;
@@ -155,15 +157,14 @@ export const verifyPaymentSignature = async (
  */
 export const verifyPaymentViaHttp = async (
   orderId: string,
-  paymentId: string,
-  signature: string
+  orderAmount?: number
 ): Promise<boolean> => {
   try {
     // Get the region and project ID from Firebase
     const region = 'us-central1'; // or your specific region
     const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
     
-    const url = `https://${region}-${projectId}.cloudfunctions.net/verifyPayment`;
+    const url = `https://${region}-${projectId}.cloudfunctions.net/api/verifyCashfreePayment`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -172,8 +173,7 @@ export const verifyPaymentViaHttp = async (
       },
       body: JSON.stringify({
         orderId,
-        paymentId,
-        signature
+        orderAmount
       })
     });
 
@@ -187,44 +187,5 @@ export const verifyPaymentViaHttp = async (
   } catch (error) {
     console.error('HTTP payment verification failed:', error);
     return false;
-  }
-};
-
-/**
- * Fetch payment details from Razorpay
- * In a production app, this should be done on the server side!
- */
-export const fetchPaymentDetails = async (paymentId: string) => {
-  try {
-    // In a real app, you would call your backend API
-    console.warn('This should be done on the server side');
-    // Just returning a dummy successful response for demo
-    return {
-      id: paymentId,
-      status: 'captured',
-      method: 'card'
-    };
-  } catch (error) {
-    console.error('Failed to fetch payment details:', error);
-    throw error;
-  }
-};
-
-/**
- * Fetch order details from Razorpay
- * In a production app, this should be done on the server side!
- */
-export const fetchOrderDetails = async (orderId: string) => {
-  try {
-    // In a real app, you would call your backend API
-    console.warn('This should be done on the server side');
-    // Just returning a dummy successful response for demo
-    return {
-      id: orderId,
-      status: 'paid'
-    };
-  } catch (error) {
-    console.error('Failed to fetch order details:', error);
-    throw error;
   }
 }; 

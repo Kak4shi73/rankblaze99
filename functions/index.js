@@ -1,19 +1,19 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const razorpayFunctions = require('./createRazorpayOrder');
+const cashfreeFunctions = require('./createCashfreeOrder');
 
 // Initialize Firebase Admin SDK if not already initialized
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Export the Razorpay callable functions
-exports.createRazorpayOrder = razorpayFunctions.createRazorpayOrder;
-exports.verifyRazorpayPayment = razorpayFunctions.verifyRazorpayPayment;
+// Export the Cashfree callable functions
+exports.createCashfreeOrder = cashfreeFunctions.createCashfreeOrder;
+exports.verifyCashfreePayment = cashfreeFunctions.verifyCashfreePayment;
 
-// Export the Razorpay HTTP endpoints
-exports.createOrder = razorpayFunctions.createRazorpayOrderHttp;
-exports.verifyPayment = razorpayFunctions.verifyRazorpayPaymentHttp;
+// Export the Cashfree HTTP endpoints
+exports.api = cashfreeFunctions.api;
+exports.cashfreeWebhook = cashfreeFunctions.cashfreeWebhook;
 
 // Re-export existing functions (if they exist)
 try {
