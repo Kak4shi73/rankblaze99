@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, CreditCard, Activity, BarChart3, UserPlus, Key, Trash2, Eye, Lock, Unlock } from 'lucide-react';
 import { auth, db, firestore } from '../config/firebase';
@@ -7,6 +7,7 @@ import { createUserWithEmailAndPassword, deleteUser, updatePassword } from 'fire
 import { useToast } from '../context/ToastContext';
 import { clearSessionData } from '../utils/securityUtils';
 import { doc, setDoc } from 'firebase/firestore';
+import AdminHamburgerMenu from '../components/ui/AdminHamburgerMenu';
 
 interface User {
   id: string;
@@ -172,7 +173,7 @@ const Admin = () => {
     fetchData();
   }, [navigate]);
 
-  const handleAddUser = async (e: React.FormEvent) => {
+  const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, newUser.email, newUser.password);
@@ -238,7 +239,7 @@ const Admin = () => {
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedUserId || !newPassword) return;
 
@@ -545,35 +546,33 @@ const Admin = () => {
     toolId: string
   ) => {
     try {
-      const now = new Date().toISOString();
+      // Get subscription data
+      const subscriptionRef = ref(db, `subscriptions/${subscriptionId}`);
+      const snapshot = await get(subscriptionRef);
       
-      // Get the subscription
-      const subscription = subscriptions.find(sub => sub.id === subscriptionId);
-      
-      if (!subscription) {
+      if (!snapshot.exists()) {
         showToast('Subscription not found', 'error');
         return;
       }
       
-      // Get the subscription tools array
-      const tools = subscription.tools || [];
+      const subscription = snapshot.val();
       
-      // Remove the tool from the array
-      const updatedTools = tools.filter(t => 
-        typeof t === 'object' ? t.id !== toolId : t !== toolId
-      );
-      
-      // Update the subscription in the database
-      const subRef = ref(db, `subscriptions/${subscriptionId}`);
-      await update(subRef, {
-        tools: updatedTools,
-        updatedAt: now
-      });
-      
-      showToast(
-        `Tool "${AVAILABLE_TOOLS.find(t => t.id === toolId)?.name || toolId}" deleted successfully`, 
-        'success'
-      );
+      // Remove tool from tools array
+      if (Array.isArray(subscription.tools)) {
+        const updatedTools = subscription.tools.filter((t: any) => {
+          if (typeof t === 'object') {
+            return t.id !== toolId;
+          }
+          return t !== toolId;
+        });
+        
+        // Update the subscription with the filtered tools array
+        await update(subscriptionRef, { tools: updatedTools });
+        
+        showToast('Tool deleted successfully', 'success');
+      } else {
+        showToast('No tools found in subscription', 'error');
+      }
     } catch (error) {
       console.error('Error deleting tool:', error);
       showToast('Failed to delete tool', 'error');
@@ -589,11 +588,11 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto px-6 py-8">
+    <div className="min-h-screen pt-20 bg-gradient-to-br from-[#0c0128] via-[#2a0669] to-[#0c0128]">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
             <button
               onClick={() => setShowAddUser(true)}
               className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -601,6 +600,7 @@ const Admin = () => {
               <UserPlus className="h-5 w-5 mr-2" />
               Add User
             </button>
+            <AdminHamburgerMenu adminId="admin" />
             <button
               onClick={handleLogout}
               className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
@@ -610,54 +610,125 @@ const Admin = () => {
           </div>
         </div>
 
-        {/* Stats Overview */}
+        {/* Metric Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-sm text-gray-500">Total Users</h2>
+            <p className="text-2xl font-bold text-blue-500">{users.length}</p>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-sm text-gray-500">Total Payments</h2>
+            <p className="text-2xl font-bold text-blue-500">
+              {payments.length}
+            </p>
+          </div>
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-sm text-gray-500">Active Subscriptions</h2>
+            <p className="text-2xl font-bold text-yellow-500">
+              {subscriptions.filter(sub => sub.status === 'active').length}
+            </p>
+          </div>
+        </div>
+
+        {/* Additional Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-indigo-400" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-400">Total Users</p>
-                <p className="text-2xl font-bold text-white">{users.length}</p>
-              </div>
+          <div className="bg-[#131731] rounded-xl p-6 flex items-center">
+            <div className="bg-blue-900/30 p-3 rounded-full mr-4">
+              <Users className="h-6 w-6 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Active Users</p>
+              <p className="text-2xl font-bold text-white">
+                {users.filter(user => !user.disabled).length}
+              </p>
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center">
-              <CreditCard className="h-8 w-8 text-green-400" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-400">Active Subscriptions</p>
-                <p className="text-2xl font-bold text-white">
-                  {subscriptions.filter(sub => sub.status === 'active').length}
-                </p>
-              </div>
+          <div className="bg-[#131731] rounded-xl p-6 flex items-center">
+            <div className="bg-green-900/30 p-3 rounded-full mr-4">
+              <CreditCard className="h-6 w-6 text-green-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Active Subscriptions</p>
+              <p className="text-2xl font-bold text-white">
+                {subscriptions.filter(sub => sub.status === 'active').length}
+              </p>
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center">
-              <Activity className="h-8 w-8 text-amber-400" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-400">Today's Payments</p>
-                <p className="text-2xl font-bold text-white">
-                  {payments.filter(payment => {
-                    const today = new Date().toISOString().split('T')[0];
-                    return payment.createdAt.split('T')[0] === today;
-                  }).length}
-                </p>
-              </div>
+          <div className="bg-[#131731] rounded-xl p-6 flex items-center">
+            <div className="bg-amber-900/30 p-3 rounded-full mr-4">
+              <Activity className="h-6 w-6 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Today's Payments</p>
+              <p className="text-2xl font-bold text-white">
+                {payments.filter(payment => {
+                  const today = new Date().toISOString().split('T')[0];
+                  return payment.createdAt.split('T')[0] === today;
+                }).length}
+              </p>
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-            <div className="flex items-center">
-              <BarChart3 className="h-8 w-8 text-purple-400" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-400">Total Revenue</p>
-                <p className="text-2xl font-bold text-white">₹{totalRevenue}</p>
-              </div>
+          <div className="bg-[#131731] rounded-xl p-6 flex items-center">
+            <div className="bg-purple-900/30 p-3 rounded-full mr-4">
+              <BarChart3 className="h-6 w-6 text-purple-400" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-400">Total Revenue</p>
+              <p className="text-2xl font-bold text-white">₹{totalRevenue}</p>
             </div>
           </div>
+        </div>
+
+        {/* User Manager Section */}
+        <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">Registered Users</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-4 py-2 text-gray-600">Name</th>
+                  <th className="px-4 py-2 text-gray-600">Email</th>
+                  <th className="px-4 py-2 text-gray-600">Role</th>
+                  <th className="px-4 py-2 text-gray-600">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {users.slice(0, 4).map(user => (
+                  <tr key={user.id}>
+                    <td className="px-4 py-2 text-gray-800">{user.name || 'N/A'}</td>
+                    <td className="px-4 py-2 text-gray-600">{user.email}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        user.isAdmin 
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {user.isAdmin ? 'Admin' : 'User'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <button 
+                        onClick={() => setShowUserDetails(user.id)}
+                        className="text-blue-500 hover:text-blue-600"
+                      >
+                        Manage
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {users.length > 4 && (
+            <div className="mt-4 text-center">
+              <button className="text-blue-500 hover:text-blue-600">
+                View all users ({users.length})
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Users Table */}
@@ -827,6 +898,344 @@ const Admin = () => {
             </table>
           </div>
         </div>
+
+        {/* User Details Modal */}
+        {showUserDetails && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-white">User Details</h2>
+                <button
+                  onClick={() => setShowUserDetails(null)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {users.find(u => u.id === showUserDetails) && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">User Information</h3>
+                    <div className="bg-gray-900 rounded-lg p-4 space-y-2">
+                      <p className="text-gray-400">Name: <span className="text-white">{users.find(u => u.id === showUserDetails)?.name}</span></p>
+                      <p className="text-gray-400">Email: <span className="text-white">{users.find(u => u.id === showUserDetails)?.email}</span></p>
+                      <p className="text-gray-400">User ID: <span className="text-white">{showUserDetails}</span></p>
+                      <p className="text-gray-400">Last Login IP: <span className="text-white">{users.find(u => u.id === showUserDetails)?.lastLoginIP || 'Unknown'}</span></p>
+                      <p className="text-gray-400">Joined: <span className="text-white">{new Date(users.find(u => u.id === showUserDetails)?.createdAt || '').toLocaleDateString()}</span></p>
+                      <p className="text-gray-400">Password Hash: <span className="text-white">{users.find(u => u.id === showUserDetails)?.passwordHash ? '••••••••' : 'Not set'}</span></p>
+                      <p className="text-gray-400">Account Status: 
+                        <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
+                          users.find(u => u.id === showUserDetails)?.disabled 
+                            ? 'bg-red-900/30 text-red-400'
+                            : 'bg-green-900/30 text-green-400'
+                        }`}>
+                          {users.find(u => u.id === showUserDetails)?.disabled ? 'Disabled' : 'Active'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Active Subscriptions & Tools</h3>
+                    <div className="space-y-3">
+                      {subscriptions
+                        .filter(sub => sub.userId === showUserDetails && sub.status === 'active')
+                        .map(sub => (
+                          <div key={sub.id} className="bg-gray-900 rounded-lg p-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="bg-green-900/30 text-green-400 px-2 py-1 text-xs font-medium rounded-full">
+                                Active
+                              </span>
+                              <span className="text-gray-400">₹{sub.amount}</span>
+                            </div>
+                            <p className="text-sm text-gray-400">Start: {new Date(sub.startDate).toLocaleDateString()}</p>
+                            <p className="text-sm text-gray-400">End: {new Date(sub.endDate).toLocaleDateString()}</p>
+                            <div className="mt-3">
+                              <p className="text-sm font-semibold text-white mb-2">Tools Included:</p>
+                              {sub.tools && sub.tools.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {sub.tools.map((tool, index) => {
+                                    // Handle both string format and object format
+                                    const toolId = typeof tool === 'object' ? tool.id : tool;
+                                    const toolStatus = typeof tool === 'object' ? tool.status : 'active';
+                                    
+                                    // Find the tool details if available
+                                    const toolInfo = AVAILABLE_TOOLS.find(t => t.id === toolId);
+                                    const toolPayment = payments.find(p => p.toolId === toolId && p.userId === showUserDetails);
+                                    
+                                    return (
+                                      <div 
+                                        key={index}
+                                        className="bg-gray-800 p-2 rounded-lg flex flex-col"
+                                      >
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-sm text-white">
+                                            {toolInfo ? toolInfo.name : toolId}
+                                          </span>
+                                          <span className={`text-xs px-2 py-1 rounded-full ${
+                                            toolStatus === 'active' 
+                                              ? 'bg-green-900/30 text-green-400'
+                                              : 'bg-red-900/30 text-red-400'
+                                          }`}>
+                                            {toolStatus}
+                                          </span>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            {toolPayment && (
+                                              <div className="text-xs text-gray-500">
+                                                Added: {new Date(toolPayment.createdAt).toLocaleDateString()}
+                                              </div>
+                                            )}
+                                            <span className="text-xs bg-purple-900/30 text-purple-400 px-2 py-1 rounded-full">
+                                              ₹{toolInfo ? toolInfo.price : '??'}
+                                            </span>
+                                          </div>
+                                          
+                                          <div className="flex gap-1">
+                                            <button
+                                              onClick={() => toggleToolStatus(
+                                                showUserDetails as string,
+                                                sub.id,
+                                                toolId,
+                                                toolStatus
+                                              )}
+                                              className={`text-xs px-2 py-1 rounded ${
+                                                toolStatus === 'active'
+                                                  ? 'bg-red-600 text-white hover:bg-red-700'
+                                                  : 'bg-green-600 text-white hover:bg-green-700'
+                                              }`}
+                                            >
+                                              {toolStatus === 'active' ? 'Suspend Tool' : 'Activate Tool'}
+                                            </button>
+                                            <button
+                                              onClick={() => deleteToolFromUser(
+                                                showUserDetails as string,
+                                                sub.id,
+                                                toolId
+                                              )}
+                                              className="text-xs px-2 py-1 rounded bg-red-800 text-white hover:bg-red-900"
+                                              title="Delete Tool Access"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">No specific tools registered</p>
+                              )}
+                            </div>
+                            <div className="mt-3 flex justify-between">
+                              <button
+                                onClick={() => {
+                                  setSelectedUserId(showUserDetails);
+                                  setShowAssignTool(true);
+                                }}
+                                className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm"
+                              >
+                                Add Tool
+                              </button>
+                              <button
+                                onClick={() => handleSubscriptionUpdate(showUserDetails as string, 'suspended')}
+                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
+                              >
+                                Suspend Subscription
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      {!subscriptions.some(sub => sub.userId === showUserDetails && sub.status === 'active') && (
+                        <div className="bg-gray-900 rounded-lg p-4 text-center">
+                          <p className="text-gray-400">No active subscriptions</p>
+                          <button
+                            onClick={() => handleSubscriptionUpdate(showUserDetails as string, 'active')}
+                            className="mt-3 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
+                          >
+                            Activate Subscription
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Subscription History</h3>
+                    <div className="space-y-3">
+                      {subscriptions
+                        .filter(sub => sub.userId === showUserDetails)
+                        .map(sub => (
+                          <div key={sub.id} className="bg-gray-900 rounded-lg p-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                sub.status === 'active'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : 'bg-red-900/30 text-red-400'
+                              }`}>
+                                {sub.status}
+                              </span>
+                              <span className="text-gray-400">₹{sub.amount}</span>
+                            </div>
+                            <p className="text-sm text-gray-400">Start: {new Date(sub.startDate).toLocaleDateString()}</p>
+                            <p className="text-sm text-gray-400">End: {new Date(sub.endDate).toLocaleDateString()}</p>
+                          </div>
+                        ))}
+                      {subscriptions.filter(sub => sub.userId === showUserDetails).length === 0 && (
+                        <div className="bg-gray-900 rounded-lg p-4 text-center">
+                          <p className="text-gray-400">No subscription history</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Payment History</h3>
+                    <div className="space-y-3">
+                      {payments
+                        .filter(payment => payment.userId === showUserDetails)
+                        .map(payment => (
+                          <div key={payment.id} className="bg-gray-900 rounded-lg p-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                payment.status === 'completed'
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : 'bg-yellow-900/30 text-yellow-400'
+                              }`}>
+                                {payment.status}
+                              </span>
+                              <span className="text-gray-400">₹{payment.amount}</span>
+                            </div>
+                            <p className="text-sm text-gray-400">Date: {new Date(payment.createdAt).toLocaleDateString()}</p>
+                            <p className="text-sm text-gray-400">Method: {payment.paymentMethod}</p>
+                            {payment.toolId && (
+                              <p className="text-sm text-gray-400">Tool: {payment.toolId}</p>
+                            )}
+                          </div>
+                        ))}
+                      {payments.filter(payment => payment.userId === showUserDetails).length === 0 && (
+                        <div className="bg-gray-900 rounded-lg p-4 text-center">
+                          <p className="text-gray-400">No payment history</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                    <button
+                      onClick={() => {
+                        setSelectedUserId(showUserDetails);
+                        setShowAssignTool(true);
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Assign Tool
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedUserId(showUserDetails);
+                        setShowChangePassword(true);
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Change Password
+                    </button>
+                    <button
+                      onClick={() => handleToggleAccountAccess(
+                        showUserDetails, 
+                        !!users.find(u => u.id === showUserDetails)?.disabled
+                      )}
+                      className={`px-4 py-2 ${
+                        users.find(u => u.id === showUserDetails)?.disabled
+                          ? 'bg-green-600 hover:bg-green-700'
+                          : 'bg-red-600 hover:bg-red-700'
+                      } text-white rounded-lg transition-colors`}
+                    >
+                      {users.find(u => u.id === showUserDetails)?.disabled
+                        ? 'Enable Account'
+                        : 'Disable Account'
+                      }
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Assign Tool Modal */}
+        {showAssignTool && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
+              <h2 className="text-xl font-bold text-white mb-4">Assign Tool to User</h2>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (selectedUserId && newTool.name) {
+                  assignToolToUser(selectedUserId, newTool.name, newTool.price);
+                  setShowAssignTool(false);
+                  setNewTool({ name: '', price: 133 });
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Tool Name</label>
+                  <select
+                    value={newTool.name}
+                    onChange={(e) => {
+                      const selectedTool = AVAILABLE_TOOLS.find(tool => tool.id === e.target.value);
+                      setNewTool({ 
+                        name: e.target.value, 
+                        price: selectedTool ? selectedTool.price : 133 
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    required
+                  >
+                    <option value="">Select a tool</option>
+                    {AVAILABLE_TOOLS.map(tool => (
+                      <option key={tool.id} value={tool.id}>
+                        {tool.name} (₹{tool.price})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Price (₹)</label>
+                  <input
+                    type="number"
+                    value={newTool.price}
+                    onChange={(e) => setNewTool({ ...newTool, price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    required
+                    min="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Default price is auto-filled based on selected tool</p>
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAssignTool(false);
+                      setNewTool({ name: '', price: 133 });
+                    }}
+                    className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Assign Tool
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add User Modal */}
@@ -918,344 +1327,6 @@ const Admin = () => {
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   Update Password
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* User Details Modal */}
-      {showUserDetails && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-white">User Details</h2>
-              <button
-                onClick={() => setShowUserDetails(null)}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <Trash2 className="h-5 w-5" />
-              </button>
-            </div>
-            
-            {users.find(u => u.id === showUserDetails) && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3">User Information</h3>
-                  <div className="bg-gray-900 rounded-lg p-4 space-y-2">
-                    <p className="text-gray-400">Name: <span className="text-white">{users.find(u => u.id === showUserDetails)?.name}</span></p>
-                    <p className="text-gray-400">Email: <span className="text-white">{users.find(u => u.id === showUserDetails)?.email}</span></p>
-                    <p className="text-gray-400">User ID: <span className="text-white">{showUserDetails}</span></p>
-                    <p className="text-gray-400">Last Login IP: <span className="text-white">{users.find(u => u.id === showUserDetails)?.lastLoginIP || 'Unknown'}</span></p>
-                    <p className="text-gray-400">Joined: <span className="text-white">{new Date(users.find(u => u.id === showUserDetails)?.createdAt || '').toLocaleDateString()}</span></p>
-                    <p className="text-gray-400">Password Hash: <span className="text-white">{users.find(u => u.id === showUserDetails)?.passwordHash ? '••••••••' : 'Not set'}</span></p>
-                    <p className="text-gray-400">Account Status: 
-                      <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
-                        users.find(u => u.id === showUserDetails)?.disabled 
-                          ? 'bg-red-900/30 text-red-400'
-                          : 'bg-green-900/30 text-green-400'
-                      }`}>
-                        {users.find(u => u.id === showUserDetails)?.disabled ? 'Disabled' : 'Active'}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3">Active Subscriptions & Tools</h3>
-                  <div className="space-y-3">
-                    {subscriptions
-                      .filter(sub => sub.userId === showUserDetails && sub.status === 'active')
-                      .map(sub => (
-                        <div key={sub.id} className="bg-gray-900 rounded-lg p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="bg-green-900/30 text-green-400 px-2 py-1 text-xs font-medium rounded-full">
-                              Active
-                            </span>
-                            <span className="text-gray-400">₹{sub.amount}</span>
-                          </div>
-                          <p className="text-sm text-gray-400">Start: {new Date(sub.startDate).toLocaleDateString()}</p>
-                          <p className="text-sm text-gray-400">End: {new Date(sub.endDate).toLocaleDateString()}</p>
-                          <div className="mt-3">
-                            <p className="text-sm font-semibold text-white mb-2">Tools Included:</p>
-                            {sub.tools && sub.tools.length > 0 ? (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {sub.tools.map((tool, index) => {
-                                  // Handle both string format and object format
-                                  const toolId = typeof tool === 'object' ? tool.id : tool;
-                                  const toolStatus = typeof tool === 'object' ? tool.status : 'active';
-                                  
-                                  // Find the tool details if available
-                                  const toolInfo = AVAILABLE_TOOLS.find(t => t.id === toolId);
-                                  const toolPayment = payments.find(p => p.toolId === toolId && p.userId === showUserDetails);
-                                  
-                                  return (
-                                    <div 
-                                      key={index}
-                                      className="bg-gray-800 p-2 rounded-lg flex flex-col"
-                                    >
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm text-white">
-                                          {toolInfo ? toolInfo.name : toolId}
-                                        </span>
-                                        <span className={`text-xs px-2 py-1 rounded-full ${
-                                          toolStatus === 'active' 
-                                            ? 'bg-green-900/30 text-green-400'
-                                            : 'bg-red-900/30 text-red-400'
-                                        }`}>
-                                          {toolStatus}
-                                        </span>
-                                      </div>
-                                      
-                                      <div className="flex items-center justify-between">
-                                        <div>
-                                          {toolPayment && (
-                                            <div className="text-xs text-gray-500">
-                                              Added: {new Date(toolPayment.createdAt).toLocaleDateString()}
-                                            </div>
-                                          )}
-                                          <span className="text-xs bg-purple-900/30 text-purple-400 px-2 py-1 rounded-full">
-                                            ₹{toolInfo ? toolInfo.price : '??'}
-                                          </span>
-                                        </div>
-                                        
-                                        <div className="flex gap-1">
-                                          <button
-                                            onClick={() => toggleToolStatus(
-                                              showUserDetails as string,
-                                              sub.id,
-                                              toolId,
-                                              toolStatus
-                                            )}
-                                            className={`text-xs px-2 py-1 rounded ${
-                                              toolStatus === 'active'
-                                                ? 'bg-red-600 text-white hover:bg-red-700'
-                                                : 'bg-green-600 text-white hover:bg-green-700'
-                                            }`}
-                                          >
-                                            {toolStatus === 'active' ? 'Suspend Tool' : 'Activate Tool'}
-                                          </button>
-                                          <button
-                                            onClick={() => deleteToolFromUser(
-                                              showUserDetails as string,
-                                              sub.id,
-                                              toolId
-                                            )}
-                                            className="text-xs px-2 py-1 rounded bg-red-800 text-white hover:bg-red-900"
-                                            title="Delete Tool Access"
-                                          >
-                                            Delete
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-500">No specific tools registered</p>
-                            )}
-                          </div>
-                          <div className="mt-3 flex justify-between">
-                            <button
-                              onClick={() => {
-                                setSelectedUserId(showUserDetails);
-                                setShowAssignTool(true);
-                              }}
-                              className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm"
-                            >
-                              Add Tool
-                            </button>
-                            <button
-                              onClick={() => handleSubscriptionUpdate(showUserDetails as string, 'suspended')}
-                              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm"
-                            >
-                              Suspend Subscription
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    {!subscriptions.some(sub => sub.userId === showUserDetails && sub.status === 'active') && (
-                      <div className="bg-gray-900 rounded-lg p-4 text-center">
-                        <p className="text-gray-400">No active subscriptions</p>
-                        <button
-                          onClick={() => handleSubscriptionUpdate(showUserDetails as string, 'active')}
-                          className="mt-3 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
-                        >
-                          Activate Subscription
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3">Subscription History</h3>
-                  <div className="space-y-3">
-                    {subscriptions
-                      .filter(sub => sub.userId === showUserDetails)
-                      .map(sub => (
-                        <div key={sub.id} className="bg-gray-900 rounded-lg p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              sub.status === 'active'
-                                ? 'bg-green-900/30 text-green-400'
-                                : 'bg-red-900/30 text-red-400'
-                            }`}>
-                              {sub.status}
-                            </span>
-                            <span className="text-gray-400">₹{sub.amount}</span>
-                          </div>
-                          <p className="text-sm text-gray-400">Start: {new Date(sub.startDate).toLocaleDateString()}</p>
-                          <p className="text-sm text-gray-400">End: {new Date(sub.endDate).toLocaleDateString()}</p>
-                        </div>
-                      ))}
-                    {subscriptions.filter(sub => sub.userId === showUserDetails).length === 0 && (
-                      <div className="bg-gray-900 rounded-lg p-4 text-center">
-                        <p className="text-gray-400">No subscription history</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3">Payment History</h3>
-                  <div className="space-y-3">
-                    {payments
-                      .filter(payment => payment.userId === showUserDetails)
-                      .map(payment => (
-                        <div key={payment.id} className="bg-gray-900 rounded-lg p-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                              payment.status === 'completed'
-                                ? 'bg-green-900/30 text-green-400'
-                                : 'bg-yellow-900/30 text-yellow-400'
-                            }`}>
-                              {payment.status}
-                            </span>
-                            <span className="text-gray-400">₹{payment.amount}</span>
-                          </div>
-                          <p className="text-sm text-gray-400">Date: {new Date(payment.createdAt).toLocaleDateString()}</p>
-                          <p className="text-sm text-gray-400">Method: {payment.paymentMethod}</p>
-                          {payment.toolId && (
-                            <p className="text-sm text-gray-400">Tool: {payment.toolId}</p>
-                          )}
-                        </div>
-                      ))}
-                    {payments.filter(payment => payment.userId === showUserDetails).length === 0 && (
-                      <div className="bg-gray-900 rounded-lg p-4 text-center">
-                        <p className="text-gray-400">No payment history</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
-                  <button
-                    onClick={() => {
-                      setSelectedUserId(showUserDetails);
-                      setShowAssignTool(true);
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Assign Tool
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedUserId(showUserDetails);
-                      setShowChangePassword(true);
-                    }}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Change Password
-                  </button>
-                  <button
-                    onClick={() => handleToggleAccountAccess(
-                      showUserDetails, 
-                      !!users.find(u => u.id === showUserDetails)?.disabled
-                    )}
-                    className={`px-4 py-2 ${
-                      users.find(u => u.id === showUserDetails)?.disabled
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-red-600 hover:bg-red-700'
-                    } text-white rounded-lg transition-colors`}
-                  >
-                    {users.find(u => u.id === showUserDetails)?.disabled
-                      ? 'Enable Account'
-                      : 'Disable Account'
-                    }
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Assign Tool Modal */}
-      {showAssignTool && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-white mb-4">Assign Tool to User</h2>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (selectedUserId && newTool.name) {
-                assignToolToUser(selectedUserId, newTool.name, newTool.price);
-                setShowAssignTool(false);
-                setNewTool({ name: '', price: 133 });
-              }
-            }} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Tool Name</label>
-                <select
-                  value={newTool.name}
-                  onChange={(e) => {
-                    const selectedTool = AVAILABLE_TOOLS.find(tool => tool.id === e.target.value);
-                    setNewTool({ 
-                      name: e.target.value, 
-                      price: selectedTool ? selectedTool.price : 133 
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                  required
-                >
-                  <option value="">Select a tool</option>
-                  {AVAILABLE_TOOLS.map(tool => (
-                    <option key={tool.id} value={tool.id}>
-                      {tool.name} (₹{tool.price})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Price (₹)</label>
-                <input
-                  type="number"
-                  value={newTool.price}
-                  onChange={(e) => setNewTool({ ...newTool, price: Number(e.target.value) })}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                  required
-                  min="0"
-                />
-                <p className="text-xs text-gray-500 mt-1">Default price is auto-filled based on selected tool</p>
-              </div>
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAssignTool(false);
-                    setNewTool({ name: '', price: 133 });
-                  }}
-                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Assign Tool
                 </button>
               </div>
             </form>

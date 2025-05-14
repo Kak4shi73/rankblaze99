@@ -252,6 +252,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Clear session data first
       clearSessionData();
+      // Clear login success flag so it shows again on next login
+      localStorage.removeItem('login_success_shown');
       // Then sign out from Firebase
       await signOut(auth);
       showToast('Successfully logged out', 'success');

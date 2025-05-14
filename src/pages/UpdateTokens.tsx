@@ -1,0 +1,266 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Save, Search, Check, Copy } from 'lucide-react';
+import { ref, onValue, update, get, set } from 'firebase/database';
+import { db } from '../config/firebase';
+import { useToast } from '../context/ToastContext';
+import { toolsData } from '../data/tools';
+
+const UpdateTokens = () => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [tokens, setTokens] = useState<{ [key: string]: string }>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedTool, setCopiedTool] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    // Check if admin is logged in via session storage
+    const adminAuth = sessionStorage.getItem('adminAuth');
+    
+    if (!adminAuth) {
+      navigate('/admin/login');
+      return;
+    }
+
+    // Fetch existing tokens with real-time updates
+    const fetchTokens = () => {
+      try {
+        const tokensRef = ref(db, 'toolTokens');
+        
+        // Set up real-time listener
+        return onValue(tokensRef, (snapshot) => {
+          if (snapshot.exists()) {
+            const tokenData = snapshot.val();
+            const processedTokens: {[key: string]: string} = {};
+            
+            // Process each token to extract the value property or use the direct value
+            Object.entries(tokenData).forEach(([toolId, tokenValue]) => {
+              if (typeof tokenValue === 'string') {
+                processedTokens[toolId] = tokenValue;
+              } else if (typeof tokenValue === 'object' && tokenValue !== null) {
+                // @ts-ignore
+                if (tokenValue.value) {
+                  // @ts-ignore
+                  processedTokens[toolId] = tokenValue.value;
+                }
+              }
+            });
+            
+            setTokens(processedTokens);
+          }
+          setIsLoading(false);
+        }, (error) => {
+          console.error('Error fetching tokens:', error);
+          showToast('Failed to fetch tokens', 'error');
+          setIsLoading(false);
+        });
+      } catch (error) {
+        console.error('Error setting up token listener:', error);
+        showToast('Failed to set up token listener', 'error');
+        setIsLoading(false);
+        return () => {}; // Return empty function if setup fails
+      }
+    };
+
+    // Set up real-time listener for token updates
+    const unsubscribe = fetchTokens();
+    
+    // Clean up the listener when component unmounts
+    return () => {
+      unsubscribe();
+    };
+  }, [navigate, showToast]);
+
+  const handleTokenChange = (toolId: string, value: string) => {
+    setTokens(prev => ({
+      ...prev,
+      [toolId]: value
+    }));
+  };
+
+  const updateToken = async (toolId: string) => {
+    try {
+      if (!tokens[toolId] || tokens[toolId].trim() === '') {
+        showToast('Please enter a token value', 'error');
+        return;
+      }
+
+      const tokenRef = ref(db, `toolTokens/${toolId}`);
+      
+      // Store the token directly as a string rather than in a value property
+      await set(tokenRef, tokens[toolId]);
+      
+      console.log(`Token updated for ${toolId}:`, tokens[toolId]);
+      showToast(`Token for ${toolId} updated successfully`, 'success');
+    } catch (error) {
+      console.error('Error updating token:', error);
+      showToast('Failed to update token', 'error');
+    }
+  };
+
+  const updateAllTokens = async () => {
+    try {
+      const tokenUpdates: Record<string, string> = {};
+      let hasValidTokens = false;
+
+      // Process tokens and validate
+      Object.entries(tokens).forEach(([toolId, token]) => {
+        if (token && token.trim() !== '') {
+          tokenUpdates[toolId] = token;
+          hasValidTokens = true;
+        }
+      });
+
+      if (!hasValidTokens) {
+        showToast('No valid tokens to update', 'error');
+        return;
+      }
+
+      console.log('Updating tokens:', tokenUpdates);
+      
+      // Update each token individually with set() to ensure they're stored directly
+      for (const [toolId, token] of Object.entries(tokenUpdates)) {
+        const tokenRef = ref(db, `toolTokens/${toolId}`);
+        await set(tokenRef, token);
+      }
+      
+      showToast('All tokens updated successfully', 'success');
+    } catch (error) {
+      console.error('Error updating all tokens:', error);
+      showToast('Failed to update tokens', 'error');
+    }
+  };
+
+  const copyToken = (toolId: string) => {
+    if (tokens[toolId]) {
+      navigator.clipboard.writeText(tokens[toolId]);
+      setCopiedTool(toolId);
+      setTimeout(() => setCopiedTool(null), 2000);
+      showToast('Token copied to clipboard', 'success');
+    }
+  };
+
+  const filteredTools = toolsData.filter(tool => 
+    tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (typeof tool.id === 'number' && `tool_${tool.id}`.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
+        <div className="w-12 h-12 border-t-2 border-b-2 border-indigo-400 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
+      <div className="container mx-auto px-6 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center">
+            <button
+              onClick={() => navigate('/admin')}
+              className="mr-4 text-indigo-300 hover:text-indigo-200 transition-colors"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>
+            <h1 className="text-3xl font-bold text-white">Update Tool Tokens</h1>
+          </div>
+          <button
+            onClick={updateAllTokens}
+            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Save className="h-5 w-5 mr-2" />
+            Save All Changes
+          </button>
+        </div>
+
+        <div className="mb-8">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+            <input
+              type="text"
+              placeholder="Search tools..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+          <div className="p-6 border-b border-gray-700">
+            <h2 className="text-xl font-bold text-white">Tool Tokens</h2>
+            <p className="text-gray-400 mt-1">
+              Manage access tokens for all tools. These tokens will be displayed to users who have purchased access.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-900">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tool</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700">
+                {filteredTools.map((tool) => {
+                  // Convert tool.id to string if it's a number
+                  const toolId = typeof tool.id === 'number' ? `tool_${tool.id}` : String(tool.id);
+                  
+                  return (
+                    <tr key={toolId}>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600">
+                            {tool.icon && <tool.icon className="h-5 w-5 text-white" />}
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-white">{tool.name}</div>
+                            <div className="text-sm text-gray-400">{toolId}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <textarea
+                          value={tokens[toolId] || ''}
+                          onChange={(e) => handleTokenChange(toolId, e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          rows={2}
+                          placeholder="Enter token value here"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => updateToken(toolId)}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-colors text-sm"
+                          >
+                            Update
+                          </button>
+                          
+                          <button
+                            onClick={() => copyToken(toolId)}
+                            className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm flex items-center"
+                          >
+                            {copiedTool === toolId ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                            {copiedTool === toolId ? 'Copied' : 'Copy'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default UpdateTokens; 

@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx,html}', './*.html'],
   theme: {
     extend: {
       colors: {
@@ -32,6 +32,38 @@ export default {
           900: '#002C99',
           950: '#001A5C',
         },
+        // Brand colors
+        brand: {
+          primary: '#3B82F6',
+          secondary: '#10B981',
+          accent: '#8B5CF6',
+          light: '#EFF6FF',
+          dark: '#111827'
+        },
+        // Simple brand colors as requested
+        brand: "#3B82F6",
+        dark: "#111827",
+        // Semantic colors
+        semantic: {
+          success: '#10B981',
+          warning: '#F59E0B',
+          error: '#EF4444',
+          info: '#3B82F6'
+        },
+        // Midnight theme
+        midnight: {
+          50: '#F8FAFC',
+          100: '#F1F5F9',
+          200: '#E2E8F0',
+          300: '#CBD5E1',
+          400: '#94A3B8',
+          500: '#64748B',
+          600: '#475569',
+          700: '#334155',
+          800: '#1E293B',
+          900: '#0F172A',
+          950: '#020617'
+        }
       },
       fontFamily: {
         'playfair': ['Playfair Display', 'serif'],

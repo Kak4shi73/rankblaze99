@@ -16,6 +16,8 @@ import NotFound from './pages/NotFound';
 import ToolAccess from './pages/ToolAccess';
 import Admin from './pages/Admin';
 import AdminLogin from './pages/AdminLogin';
+import UpdateTokens from './pages/UpdateTokens';
+import Reviews from './pages/Reviews';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -55,7 +57,7 @@ function App() {
                       } 
                     />
                     <Route 
-                      path="/tool/:toolId" 
+                      path="/tool-access/:toolId" 
                       element={
                         <AuthGuard>
                           <ToolAccess />
@@ -74,12 +76,21 @@ function App() {
                     <Route path="/terms" element={<Terms />} />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/refund" element={<RefundPolicy />} />
+                    <Route path="/reviews" element={<Reviews />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route
-                      path="/admin/*"
+                      path="/admin"
                       element={
                         <AdminGuard>
                           <Admin />
+                        </AdminGuard>
+                      }
+                    />
+                    <Route
+                      path="/admin/update-tokens"
+                      element={
+                        <AdminGuard>
+                          <UpdateTokens />
                         </AdminGuard>
                       }
                     />

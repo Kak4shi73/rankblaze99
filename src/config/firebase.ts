@@ -4,7 +4,9 @@ import { getFirestore } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
 import { getDatabase } from 'firebase/database';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { siteConfig } from './site';
 
+// Firebase configuration prioritizing environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBx-OgBVYWuf6v4Hm-3ifmCkoVxmD8YNXE",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "rankblaze-138f7.firebaseapp.com",
@@ -33,7 +35,8 @@ const collections = {
   userSubscriptions: 'user_subscriptions',
   adminSubscriptions: 'admin_subscriptions',
   userPayments: 'user_payments',
-  adminPayments: 'admin_payments'
+  adminPayments: 'admin_payments',
+  siteSettings: 'site_settings'
 };
 
 // Initialize admin user with improved error handling
@@ -45,7 +48,7 @@ const initializeAdmin = async () => {
       return;
     }
 
-    const adminEmail = 'aryansingh2611@outlook.com';
+    const adminEmail = siteConfig.contact.email;
     
     // Check if admin document exists first
     const adminSnapshot = await getDoc(doc(firestore, collections.adminUsers, 'admin'));
@@ -57,11 +60,26 @@ const initializeAdmin = async () => {
         isAdmin: true,
         createdAt: new Date().toISOString(),
         role: 'super_admin',
-        permissions: ['all']
+        permissions: ['all'],
+        domain: siteConfig.url
       });
       console.log('Admin user data created');
     } else {
       console.log('Admin user already exists');
+    }
+
+    // Initialize site settings if they don't exist
+    const siteSettingsSnapshot = await getDoc(doc(firestore, collections.siteSettings, 'general'));
+    
+    if (!siteSettingsSnapshot.exists()) {
+      await setDoc(doc(firestore, collections.siteSettings, 'general'), {
+        siteName: siteConfig.name,
+        siteDescription: siteConfig.description,
+        siteUrl: siteConfig.url,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: 'system'
+      });
+      console.log('Site settings created');
     }
   } catch (error) {
     console.error('Error with admin initialization:', error);

@@ -1,78 +1,213 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Download, Copy, ArrowLeft } from 'lucide-react';
+import { Shield, Download, Copy, ArrowLeft, ExternalLink, Check } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
-import { ref, get, onValue } from 'firebase/database';
+import { ref, get, onValue, set } from 'firebase/database';
+
+// Define types for the application
+interface ToolInfoItem {
+  name: string;
+  icon: string;
+  description: string;
+  downloadUrl: string;
+  toolUrl: string;
+}
+
+interface ToolInfoMap {
+  [key: string]: ToolInfoItem;
+  default: ToolInfoItem;
+}
+
+interface Subscription {
+  id: string;
+  userId: string;
+  status: string;
+  endDate: number;
+  tools: Array<string | { id: string; status: string }>;
+  [key: string]: any;
+}
 
 // Define tool information for rendering
-const TOOL_INFO = {
+const TOOL_INFO: ToolInfoMap = {
   chatgpt_plus: {
     name: 'ChatGPT Plus',
     icon: '🤖',
     description: 'Access to advanced AI capabilities and GPT-4',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://chat.openai.com/'
   },
   envato_elements: {
     name: 'Envato Elements',
     icon: '🎨',
     description: 'Unlimited downloads of templates, photos, graphics, and more',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://elements.envato.com/'
   },
   canva_pro: {
     name: 'Canva Pro',
     icon: '✏️',
     description: 'Design anything with premium templates and assets',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://www.canva.com/'
   },
   storyblocks: {
     name: 'Storyblocks',
     icon: '🎬',
     description: 'Access to royalty-free video, audio, and images',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://www.storyblocks.com/'
   },
   semrush: {
     name: 'SEMrush',
     icon: '📈',
     description: 'Advanced SEO and competitive analysis tools',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://www.semrush.com/'
   },
   // Default for any tool not specifically defined
   default: {
     name: 'Premium Tool',
     icon: '⚡',
     description: 'Access to premium features and capabilities',
-    downloadUrl: 'https://drive.google.com/file/d/1cCILqT0BWMqJRwqM0OIxtESbuR0bYaj-/view?usp=drivesdk'
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: '#'
   }
 };
 
-const ToolAccess = () => {
-  const { toolId } = useParams();
+// Mapping of tool IDs to possible Firebase token IDs
+const TOOL_ID_MAPPING: Record<string, string[]> = {
+  'chatgpt_plus': ['chatgpt_plus', 'chatgpt', 'tool_1', '1'],
+  'envato_elements': ['envato_elements', 'envato', 'tool_2', '2'],
+  'canva_pro': ['canva_pro', 'canva', 'tool_3', '3'],
+  'storyblocks': ['storyblocks', 'tool_4', '4'],
+  'semrush': ['semrush', 'tool_5', '5'],
+  // Add more mappings as needed
+};
+
+interface RouteParams {
+  toolId: string;
+  [key: string]: string;
+}
+
+const ToolAccess: React.FC = () => {
+  const { toolId } = useParams<RouteParams>();
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
-  const [subscription, setSubscription] = useState<any>(null);
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
-  const [toolInfo, setToolInfo] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasAccess, setHasAccess] = useState<boolean>(false);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [toolInfo, setToolInfo] = useState<ToolInfoItem | null>(null);
+  const [tokenCopied, setTokenCopied] = useState<boolean>(false);
+  const [toolToken, setToolToken] = useState<string | null>(null);
+
+  // Fetch the tool token - defined outside useEffect to be accessible elsewhere
+  const fetchToolToken = async (): Promise<void> => {
+    if (!toolId) return;
+    
+    setIsLoading(true);
+    try {
+      console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
+      
+      // Get all possible IDs for this tool
+      const possibleIds = TOOL_ID_MAPPING[toolId] || [toolId];
+      
+      // Add standard variations if not in the mapping
+      if (!TOOL_ID_MAPPING[toolId]) {
+        // If toolId has a 'tool_' prefix, also try without it
+        if (toolId.startsWith('tool_')) {
+          possibleIds.push(toolId.substring(5));
+        }
+        // Also try with a 'tool_' prefix if it doesn't have one
+        else {
+          possibleIds.push(`tool_${toolId}`);
+        }
+        
+        // Try numeric ID if there are digits
+        const numericId = toolId.replace(/\D/g, '');
+        if (numericId) {
+          possibleIds.push(numericId);
+        }
+      }
+      
+      console.log(`Possible IDs for ${toolId}:`, possibleIds);
+      
+      // Generate all possible paths to check
+      const paths: string[] = [];
+      for (const id of possibleIds) {
+        paths.push(`toolTokens/${id}`);
+        paths.push(`toolTokens/${id}/value`);
+        paths.push(`sessionTokens/${id}`);
+        paths.push(`tokens/${id}`);
+        paths.push(`tool_tokens/${id}`);
+      }
+      
+      console.log("Trying the following paths:", paths);
+      
+      // Try all paths in sequence
+      for (const path of paths) {
+        console.log(`Trying path: ${path}`);
+        const tokenRef = ref(db, path);
+        const snapshot = await get(tokenRef);
+        
+        if (snapshot.exists()) {
+          console.log(`Found data at path ${path}:`, snapshot.val());
+          
+          // Determine how to extract the token based on data structure
+          if (typeof snapshot.val() === 'string') {
+            console.log('Token is direct string value:', snapshot.val());
+            setToolToken(snapshot.val());
+            setIsLoading(false);
+            return;
+          } else if (typeof snapshot.val() === 'object' && snapshot.val() !== null) {
+            if (snapshot.val().value) {
+              console.log('Token found in value property:', snapshot.val().value);
+              setToolToken(snapshot.val().value);
+              setIsLoading(false);
+              return;
+            } 
+            // If it's an object but doesn't have a value property, try to stringify it
+            else {
+              const tokenString = JSON.stringify(snapshot.val());
+              console.log('Converting object token to string:', tokenString);
+              setToolToken(tokenString);
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+      }
+      
+      // Direct database listing as a last resort
+      console.log("No token found in standard paths. Listing all paths in toolTokens:");
+      const allTokensRef = ref(db, 'toolTokens');
+      const allTokensSnapshot = await get(allTokensRef);
+      if (allTokensSnapshot.exists()) {
+        console.log("Available tool tokens:", Object.keys(allTokensSnapshot.val()));
+      }
+      
+      console.log('No token found in any location for tool:', toolId);
+      setToolToken(null);
+    } catch (error) {
+      console.error('Error fetching tool token:', error);
+      setToolToken(null);
+    }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
     if (!user || !toolId) return;
 
     // Set the tool info
     setToolInfo(TOOL_INFO[toolId as keyof typeof TOOL_INFO] || TOOL_INFO.default);
-    
-    // Generate a unique code based on user ID and tool ID
-    const uniqueCode = `${toolId}_${user.id.substring(0, 8)}_${Date.now().toString(36)}`;
-    setGeneratedCode(uniqueCode);
 
     // Check if user has access to this tool
     const checkAccess = () => {
       const subscriptionsRef = ref(db, 'subscriptions');
       
-      onValue(subscriptionsRef, (snapshot) => {
+      return onValue(subscriptionsRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           
@@ -101,20 +236,35 @@ const ToolAccess = () => {
           if (hasTool) {
             setHasAccess(true);
             setSubscription(userSubscriptions[0]);
+            
+            // Fetch the tool token
+            fetchToolToken();
+            
+            // Also set up a real-time listener for token updates
+            const tokenListener = onValue(ref(db, 'toolTokens'), () => {
+              console.log("Tool tokens updated in Firebase, refreshing...");
+              fetchToolToken();
+            });
+            
+            // Return cleanup function
+            return () => {
+              tokenListener();
+            };
           } else {
             setHasAccess(false);
+            setIsLoading(false);
           }
         } else {
           setHasAccess(false);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       });
     };
 
-    checkAccess();
-  }, [user, toolId, showToast]);
+    return checkAccess();
+  }, [user, toolId]);
 
-  const handleDownload = () => {
+  const handleDownload = (): void => {
     if (!hasAccess) {
       showToast('Access denied', 'error');
       return;
@@ -124,11 +274,24 @@ const ToolAccess = () => {
     window.open(downloadUrl, '_blank');
   };
 
-  const copyCode = () => {
-    if (generatedCode && hasAccess) {
-      navigator.clipboard.writeText(generatedCode);
-      showToast('Code copied to clipboard', 'success');
+  const copyToken = (): void => {
+    if (toolToken && hasAccess) {
+      navigator.clipboard.writeText(toolToken);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+      showToast('Token copied to clipboard', 'success');
     }
+  };
+
+  const openTool = (): void => {
+    if (!hasAccess || !toolId) {
+      showToast('Access denied', 'error');
+      return;
+    }
+    
+    const toolUrl = toolInfo?.toolUrl || TOOL_INFO.default.toolUrl;
+    window.open(toolUrl, '_blank');
+    showToast('Opening tool in new tab', 'info');
   };
 
   if (!user) {
@@ -203,51 +366,122 @@ const ToolAccess = () => {
             </div>
 
             <div className="space-y-6">
-              {/* Extension Download Section */}
-              <div className="p-6 bg-gray-900 rounded-lg border border-gray-700">
-                <h2 className="text-xl font-semibold text-white mb-4">Download Extension</h2>
-                <p className="text-indigo-200 mb-4">
-                  Download our browser extension to start using {toolInfo?.name}.
+              {/* Main Tool Token Section */}
+              <div className="p-8 bg-gradient-to-br from-purple-900 to-indigo-900 rounded-lg border border-purple-700 shadow-lg">
+                <h2 className="text-2xl font-semibold text-white mb-4">Your Access Token</h2>
+                <p className="text-indigo-200 mb-6">
+                  Use this token to access {toolInfo?.name}. Copy it and use it to log in.
                 </p>
-                <button
-                  onClick={handleDownload}
-                  className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  <Download className="h-5 w-5 mr-2" />
-                  Download Extension
-                </button>
-              </div>
-
-              {/* Code Display Section */}
-              {generatedCode && (
-                <div className="p-6 bg-gray-900 rounded-lg border border-gray-700">
-                  <h2 className="text-xl font-semibold text-white mb-4">Access Code</h2>
-                  <p className="text-indigo-200 mb-4">
-                    Use this code to activate {toolInfo?.name}.
-                  </p>
-                  <div className="flex items-center bg-gray-800 rounded-lg border border-gray-600 p-4">
-                    <code className="text-xl font-mono text-amber-400 flex-1 overflow-x-auto">
-                      {generatedCode}
-                    </code>
-                    <button
-                      onClick={copyCode}
-                      className="ml-4 p-2 text-gray-400 hover:text-white transition-colors"
-                      title="Copy code"
+                
+                {isLoading ? (
+                  <div className="flex justify-center p-6">
+                    <div className="w-10 h-10 border-t-2 border-b-2 border-indigo-400 rounded-full animate-spin"></div>
+                  </div>
+                ) : toolToken ? (
+                  <div className="flex flex-col space-y-5">
+                    <div className="relative">
+                      <div className="p-5 bg-gray-800 rounded-lg border border-gray-700 font-mono text-md text-amber-400 break-all">
+                        {toolToken}
+                      </div>
+                      <button
+                        onClick={copyToken}
+                        className="absolute top-3 right-3 p-2 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors"
+                        title="Copy token"
+                      >
+                        {tokenCopied ? (
+                          <Check className="h-5 w-5 text-green-400" />
+                        ) : (
+                          <Copy className="h-5 w-5 text-gray-300" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <button
+                        onClick={copyToken}
+                        className="flex-1 flex items-center justify-center px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <Copy className="h-5 w-5 mr-2" />
+                        Copy Token
+                      </button>
+                      
+                      <button
+                        onClick={openTool}
+                        className="flex-1 flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <ExternalLink className="h-5 w-5 mr-2" />
+                        Open {toolInfo?.name}
+                      </button>
+                    </div>
+                    
+                    <p className="text-center text-indigo-200 mt-2">
+                      First copy your token, then click "Open {toolInfo?.name}" and use the token to log in.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center p-6 bg-gray-800/70 rounded-lg border border-gray-700">
+                    <p className="text-indigo-200 mb-6 text-lg">
+                      No token found for {toolInfo?.name}. Please contact support or check back later.
+                    </p>
+                    
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                      <button
+                        onClick={handleDownload}
+                        className="inline-flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <Download className="h-5 w-5 mr-2" />
+                        Download Resources
+                      </button>
+                      
+                      <button
+                        onClick={openTool}
+                        className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <ExternalLink className="h-5 w-5 mr-2" />
+                        Open {toolInfo?.name}
+                      </button>
+                    </div>
+                    
+                    {/* Show refresh button to try fetching the token again */}
+                    <button 
+                      onClick={() => fetchToolToken()} 
+                      className="mt-4 text-indigo-400 underline hover:text-indigo-300"
                     >
-                      <Copy className="h-5 w-5" />
+                      Refresh Token
                     </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Important Notes */}
+              {/* Subscription Info */}
               <div className="p-6 bg-gray-900 rounded-lg border border-gray-700">
-                <h2 className="text-xl font-semibold text-white mb-4">Important Notes</h2>
-                <ul className="space-y-2 text-indigo-200">
-                  <li>• Keep your access code secure and don't share it with others</li>
-                  <li>• This access is tied to your account only</li>
-                  <li>• Contact support if you experience any access issues</li>
-                </ul>
+                <h2 className="text-xl font-semibold text-white mb-4">Subscription Info</h2>
+                {subscription && (
+                  <div className="space-y-2">
+                    <p className="text-indigo-200">
+                      <span className="text-gray-400">Status:</span> {subscription.status}
+                    </p>
+                    <p className="text-indigo-200">
+                      <span className="text-gray-400">Valid until:</span> {new Date(subscription.endDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Download Resources Section */}
+              <div className="p-6 bg-gray-900 rounded-lg border border-gray-700">
+                <h2 className="text-xl font-semibold text-white mb-4">Download Resources</h2>
+                <p className="text-indigo-200 mb-4">
+                  Need additional help? Download our extension for {toolInfo?.name}.
+                </p>
+                
+                <button
+                  onClick={handleDownload}
+                  className="w-full flex items-center justify-center px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  <Download className="h-5 w-5 mr-2" />
+                  Download extension
+                </button>
               </div>
             </div>
           </div>

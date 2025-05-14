@@ -4,9 +4,13 @@ import HeroSection from '../components/home/HeroSection';
 import ToolsSlideshow from '../components/home/ToolsSlideshow';
 import Testimonials from '../components/home/Testimonials';
 import HowItWorks from '../components/home/HowItWorks';
+import { useAutoToasts } from '../utils/autoToasts';
 
 const Home = () => {
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Initialize auto toasts
+  useAutoToasts();
 
   useEffect(() => {
     setIsLoaded(true);
