@@ -13,6 +13,7 @@ const PaymentPage = () => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('razorpay');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -35,7 +36,10 @@ const PaymentPage = () => {
   const handlePayment = async () => {
     try {
       setIsProcessing(true);
+      setIsCreatingOrder(true);
       setErrorMessage(null);
+      
+      showToast('Creating order...', 'info');
       
       // Create an order in Razorpay - amount in paise (multiply by 100)
       const order = await createOrder({
@@ -48,9 +52,13 @@ const PaymentPage = () => {
         }
       });
       
-      if (!order || !order.id) {
-        throw new Error('Failed to create order');
+      setIsCreatingOrder(false);
+      
+      if (!order || !order.orderId) {
+        throw new Error('Failed to create order. No order ID returned.');
       }
+      
+      showToast('Order created successfully!', 'success');
       
       const options = {
         key: RAZORPAY_KEY_ID,
@@ -59,7 +67,7 @@ const PaymentPage = () => {
         name: 'Rank Blaze',
         description: 'Purchase of SEO Tools',
         image: '/logo.png',
-        order_id: order.id,
+        order_id: order.orderId,
         handler: function (response: any) {
           // Handle successful payment
           handlePaymentSuccess(
@@ -78,6 +86,7 @@ const PaymentPage = () => {
         modal: {
           ondismiss: function() {
             setIsProcessing(false);
+            showToast('Payment cancelled', 'info');
           }
         }
       };
@@ -88,6 +97,7 @@ const PaymentPage = () => {
     } catch (error) {
       console.error('Payment initialization error:', error);
       setIsProcessing(false);
+      setIsCreatingOrder(false);
       
       // Display error message
       const errorMsg = error instanceof Error ? error.message : 'Payment initialization failed';
@@ -102,9 +112,10 @@ const PaymentPage = () => {
     signature: string
   ) => {
     try {
-      // In production, verification should happen on the server side
-      // For demo purposes, we're doing it client-side
-      const isValid = verifyPaymentSignature(orderId, paymentId, signature);
+      showToast('Verifying payment...', 'info');
+      
+      // Verify payment signature through Firebase Function
+      const isValid = await verifyPaymentSignature(orderId, paymentId, signature);
       
       if (!isValid) {
         showToast('Payment verification failed', 'error');
@@ -112,6 +123,7 @@ const PaymentPage = () => {
         return;
       }
       
+      showToast('Payment verified!', 'success');
       const now = new Date().toISOString();
 
       // Create payment record
@@ -229,7 +241,7 @@ const PaymentPage = () => {
                 {isProcessing ? (
                   <>
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Processing...
+                    {isCreatingOrder ? 'Creating Order...' : 'Processing...'}
                   </>
                 ) : (
                   'Pay Now'

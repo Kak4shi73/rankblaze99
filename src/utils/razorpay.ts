@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Razorpay key ID for client-side usage
 export const RAZORPAY_KEY_ID = 'rzp_test_OChtDbosOz00ju';
@@ -7,41 +8,38 @@ export const RAZORPAY_KEY_ID = 'rzp_test_OChtDbosOz00ju';
 // In a production environment, this would be stored securely on your backend
 const KEY_SECRET = '0A8EfMcUW90DE57mNtffGeqy';
 
+// Type definitions
+export interface RazorpayOrderResponse {
+  orderId: string;
+  amount: number;
+  currency: string;
+}
+
 /**
- * Creates a new order in Razorpay
- * @param options Order options
- * @returns Promise with order details
+ * Creates a new order in Razorpay via Firebase Functions
  */
 export const createOrder = async (options: {
   amount: number;
   currency?: string;
   receipt?: string;
   notes?: Record<string, string>;
-}) => {
+}): Promise<RazorpayOrderResponse> => {
   try {
-    // In a production app, you'd call your own backend API which would then use the Razorpay SDK
-    // For demo purposes, we're making a direct API call (NOT recommended for production)
-    const response = await fetch('https://api.razorpay.com/v1/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${KEY_SECRET}`)
-      },
-      body: JSON.stringify({
-        amount: options.amount,
-        currency: options.currency || 'INR',
-        receipt: options.receipt || `receipt_${Date.now()}`,
-        notes: options.notes || {}
-      })
+    const functions = getFunctions();
+    const createRazorpayOrderFn = httpsCallable<typeof options, RazorpayOrderResponse>(
+      functions, 
+      'createRazorpayOrder'
+    );
+    
+    const result = await createRazorpayOrderFn({
+      amount: options.amount,
+      currency: options.currency || 'INR',
+      receipt: options.receipt || `receipt_${Date.now()}`,
+      notes: options.notes || {}
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Order creation failed:', errorData);
-      throw new Error(errorData.error?.description || 'Failed to create order');
-    }
-
-    return await response.json();
+    
+    // The result.data will contain the order details
+    return result.data;
   } catch (error) {
     console.error('Razorpay order creation failed:', error);
     throw error;
@@ -49,18 +47,32 @@ export const createOrder = async (options: {
 };
 
 /**
- * Verifies Razorpay payment signature
- * In a production app, this should be done on the server side!
+ * Verifies Razorpay payment signature via Firebase Functions
  */
-export const verifyPaymentSignature = (
+export const verifyPaymentSignature = async (
   orderId: string,
   paymentId: string,
   signature: string
-) => {
-  // In a real app, you would call your backend API to verify the signature
-  // For demo purposes, we're just returning true
-  console.warn('Payment signature verification should be performed on the server side');
-  return true;
+): Promise<boolean> => {
+  try {
+    const functions = getFunctions();
+    const verifyRazorpayPaymentFn = httpsCallable<
+      { orderId: string; paymentId: string; signature: string },
+      { isValid: boolean }
+    >(functions, 'verifyRazorpayPayment');
+    
+    const result = await verifyRazorpayPaymentFn({
+      orderId,
+      paymentId,
+      signature
+    });
+    
+    // The result.data will contain { isValid: boolean }
+    return result.data.isValid;
+  } catch (error) {
+    console.error('Signature verification failed:', error);
+    return false;
+  }
 };
 
 /**
