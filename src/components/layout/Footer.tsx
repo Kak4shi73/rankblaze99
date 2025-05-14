@@ -48,9 +48,6 @@ const Footer = () => {
                 <a href="/tools" className="text-indigo-200 hover:text-amber-400 transition-colors">Tools</a>
               </li>
               <li>
-                <a href="/about" className="text-indigo-200 hover:text-amber-400 transition-colors">About Us</a>
-              </li>
-              <li>
                 <a href="/blog" className="text-indigo-200 hover:text-amber-400 transition-colors">Blog</a>
               </li>
               <li>
@@ -62,9 +59,6 @@ const Footer = () => {
           <div>
             <h3 className="text-lg font-bold text-white mb-6">Help & Support</h3>
             <ul className="space-y-3">
-              <li>
-                <a href="/faq" className="text-indigo-200 hover:text-amber-400 transition-colors">FAQ</a>
-              </li>
               <li>
                 <a href="/support" className="text-indigo-200 hover:text-amber-400 transition-colors">Support Center</a>
               </li>
