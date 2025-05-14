@@ -1,39 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CreditCard, Wallet, Check, ArrowLeft } from 'lucide-react';
+import { CreditCard, Check, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
-import { ref, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
+import { createOrder, verifyPaymentSignature } from '../utils/razorpay';
 
-type PaymentMethod = 'razorpay' | 'binance';
-
-interface PaymentDetails {
-  razorpay: {
-    link: string;
-  };
-  binance: {
-    network: string;
-    address: string;
-    id: string;
-  };
-}
-
-const paymentDetails: PaymentDetails = {
-  razorpay: {
-    link: 'razorpay.me/@MaxRajput'
-  },
-  binance: {
-    network: 'Tron(TRC20)',
-    address: 'TM2tjmRxLQXaAUJcG3FNcpJrnerfL194M4',
-    id: '1010075495'
-  }
-};
+type PaymentMethod = 'razorpay';
 
 const PaymentPage = () => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('razorpay');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -53,30 +32,100 @@ const PaymentPage = () => {
     }
   }, [user, cartItems, navigate]);
 
-  const handleCopy = async (text: string, type: string) => {
+  const createRazorpayOrder = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
-      showToast('Copied to clipboard', 'success');
+      setIsProcessing(true);
+      
+      // Create an order in Razorpay - amount in paise (multiply by 100)
+      const order = await createOrder({
+        amount: total * 100,
+        currency: 'INR',
+        receipt: `receipt_${Date.now()}`,
+        notes: {
+          userId: user?.id || '',
+          cartItems: JSON.stringify(cartItems.map((item: any) => ({ id: item.id, name: item.name })))
+        }
+      });
+      
+      setOrderId(order.id);
+      return order;
     } catch (error) {
-      showToast('Failed to copy', 'error');
+      console.error('Failed to create Razorpay order:', error);
+      showToast('Failed to create order', 'error');
+      setIsProcessing(false);
+      throw error;
     }
   };
 
-  const initiatePaymentTracking = async () => {
+  const handlePayment = async () => {
     try {
-      setIsProcessing(true);
+      const order = await createRazorpayOrder();
+      
+      const options = {
+        key: 'rzp_test_OChtDbosOz00ju',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Rank Blaze',
+        description: 'Purchase of SEO Tools',
+        image: '/logo.png',
+        order_id: order.id,
+        handler: function (response: any) {
+          // Handle successful payment
+          handlePaymentSuccess(
+            response.razorpay_payment_id,
+            response.razorpay_order_id,
+            response.razorpay_signature
+          );
+        },
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        theme: {
+          color: '#4338ca',
+        },
+        modal: {
+          ondismiss: function() {
+            setIsProcessing(false);
+          }
+        }
+      };
+
+      // Open Razorpay checkout form
+      const razorpayWindow = new (window as any).Razorpay(options);
+      razorpayWindow.open();
+    } catch (error) {
+      setIsProcessing(false);
+      showToast('Payment initialization failed', 'error');
+    }
+  };
+
+  const handlePaymentSuccess = async (
+    paymentId: string,
+    orderId: string,
+    signature: string
+  ) => {
+    try {
+      // Verify payment signature
+      const isValid = verifyPaymentSignature(orderId, paymentId, signature);
+      
+      if (!isValid) {
+        showToast('Payment verification failed', 'error');
+        setIsProcessing(false);
+        return;
+      }
+      
       const now = new Date().toISOString();
 
       // Create payment record
-      const paymentId = Date.now().toString();
       const paymentRef = ref(db, `payments/${paymentId}`);
       const paymentData = {
         userId: user?.id,
         amount: total,
-        paymentMethod: selectedMethod,
-        status: 'pending',
+        razorpayOrderId: orderId,
+        razorpayPaymentId: paymentId,
+        paymentMethod: 'razorpay',
+        status: 'completed',
         createdAt: now,
         updatedAt: now
       };
@@ -94,50 +143,18 @@ const PaymentPage = () => {
           paymentId,
           startDate: now,
           endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          status: 'pending',
+          status: 'active',
           createdAt: now
         };
         await set(subscriptionRef, subscriptionData);
       }
 
-      // Simulate payment confirmation
-      setTimeout(async () => {
-        try {
-          // Update payment status
-          await set(paymentRef, {
-            ...paymentData,
-            status: 'completed',
-            updatedAt: new Date().toISOString()
-          });
-
-          // Update subscription statuses
-          const subscriptionsRef = ref(db, 'subscriptions');
-          const subscriptionsSnapshot = await get(subscriptionsRef);
-          if (subscriptionsSnapshot.exists()) {
-            const subscriptions = subscriptionsSnapshot.val();
-            for (const [id, subscription] of Object.entries(subscriptions)) {
-              if (subscription.paymentId === paymentId) {
-                await set(ref(db, `subscriptions/${id}`), {
-                  ...subscription,
-                  status: 'active',
-                  updatedAt: new Date().toISOString()
-                });
-              }
-            }
-          }
-
-          showToast('Payment processed successfully', 'success');
-          navigate('/dashboard');
-        } catch (error) {
-          console.error('Error updating payment status:', error);
-          showToast('Failed to process payment', 'error');
-        } finally {
-          setIsProcessing(false);
-        }
-      }, 5000);
+      setIsProcessing(false);
+      showToast('Payment successful!', 'success');
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Error initiating payment:', error);
-      showToast('Failed to initiate payment', 'error');
+      console.error('Error processing payment success:', error);
+      showToast('Failed to process payment', 'error');
       setIsProcessing(false);
     }
   };
@@ -157,123 +174,26 @@ const PaymentPage = () => {
           <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
             <div className="p-6 border-b border-gray-700">
               <h1 className="text-2xl font-bold text-white">Complete Payment</h1>
-              <p className="text-indigo-300 mt-1">Choose your preferred payment method</p>
+              <p className="text-indigo-300 mt-1">Secure payment via Razorpay</p>
             </div>
 
             <div className="p-6">
               {/* Payment Method Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+              <div className="grid grid-cols-1 gap-4 mb-8">
                 <button
-                  onClick={() => setSelectedMethod('razorpay')}
-                  className={`p-4 rounded-lg border ${
-                    selectedMethod === 'razorpay'
-                      ? 'border-indigo-500 bg-indigo-900/50'
-                      : 'border-gray-700 bg-gray-900/50 hover:bg-gray-900'
-                  } transition-colors`}
+                  className="p-4 rounded-lg border border-indigo-500 bg-indigo-900/50 transition-colors"
                 >
                   <div className="flex items-center">
-                    <div className={`p-3 rounded-lg ${
-                      selectedMethod === 'razorpay' ? 'bg-indigo-600' : 'bg-gray-800'
-                    }`}>
+                    <div className="p-3 rounded-lg bg-indigo-600">
                       <CreditCard className="h-6 w-6 text-white" />
                     </div>
                     <div className="ml-4">
                       <h3 className="text-lg font-semibold text-white">Razorpay</h3>
-                      <p className="text-indigo-300 text-sm">Pay using Razorpay link</p>
+                      <p className="text-indigo-300 text-sm">Pay securely with Razorpay</p>
                     </div>
-                    {selectedMethod === 'razorpay' && (
-                      <Check className="h-5 w-5 text-indigo-400 ml-auto" />
-                    )}
+                    <Check className="h-5 w-5 text-indigo-400 ml-auto" />
                   </div>
                 </button>
-
-                <button
-                  onClick={() => setSelectedMethod('binance')}
-                  className={`p-4 rounded-lg border ${
-                    selectedMethod === 'binance'
-                      ? 'border-indigo-500 bg-indigo-900/50'
-                      : 'border-gray-700 bg-gray-900/50 hover:bg-gray-900'
-                  } transition-colors`}
-                >
-                  <div className="flex items-center">
-                    <div className={`p-3 rounded-lg ${
-                      selectedMethod === 'binance' ? 'bg-indigo-600' : 'bg-gray-800'
-                    }`}>
-                      <Wallet className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="text-lg font-semibold text-white">Binance</h3>
-                      <p className="text-indigo-300 text-sm">Pay using Binance</p>
-                    </div>
-                    {selectedMethod === 'binance' && (
-                      <Check className="h-5 w-5 text-indigo-400 ml-auto" />
-                    )}
-                  </div>
-                </button>
-              </div>
-
-              {/* Payment Details */}
-              <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 mb-8">
-                <h2 className="text-xl font-semibold text-white mb-4">Payment Details</h2>
-                
-                {selectedMethod === 'razorpay' ? (
-                  <div>
-                    <p className="text-indigo-300 mb-4">
-                      Click the button below to open Razorpay payment link
-                    </p>
-                    <div className="flex items-center space-x-4">
-                      <a
-                        href={`https://${paymentDetails.razorpay.link}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        Open Razorpay
-                      </a>
-                      <button
-                        onClick={() => handleCopy(paymentDetails.razorpay.link, 'razorpay')}
-                        className="px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
-                      >
-                        {copied === 'razorpay' ? 'Copied!' : 'Copy Link'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-indigo-300 mb-1">Network</p>
-                      <div className="flex items-center bg-gray-800 rounded-lg p-3 border border-gray-700">
-                        <span className="text-white">{paymentDetails.binance.network}</span>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-indigo-300 mb-1">Binance ID</p>
-                      <div className="flex items-center justify-between bg-gray-800 rounded-lg p-3 border border-gray-700">
-                        <span className="text-white">{paymentDetails.binance.id}</span>
-                        <button
-                          onClick={() => handleCopy(paymentDetails.binance.id, 'id')}
-                          className="text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                          {copied === 'id' ? 'Copied!' : 'Copy'}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm text-indigo-300 mb-1">Deposit Address</p>
-                      <div className="flex items-center justify-between bg-gray-800 rounded-lg p-3 border border-gray-700">
-                        <span className="text-white break-all">{paymentDetails.binance.address}</span>
-                        <button
-                          onClick={() => handleCopy(paymentDetails.binance.address, 'address')}
-                          className="text-indigo-400 hover:text-indigo-300 transition-colors ml-4"
-                        >
-                          {copied === 'address' ? 'Copied!' : 'Copy'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Order Summary */}
@@ -294,7 +214,7 @@ const PaymentPage = () => {
               </div>
 
               <button
-                onClick={initiatePaymentTracking}
+                onClick={handlePayment}
                 disabled={isProcessing}
                 className={`w-full flex justify-center items-center py-3 px-4 rounded-lg text-white font-medium transition-all duration-300 ${
                   isProcessing
@@ -305,10 +225,10 @@ const PaymentPage = () => {
                 {isProcessing ? (
                   <>
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Processing Payment...
+                    Processing...
                   </>
                 ) : (
-                  'Confirm Payment'
+                  'Pay Now'
                 )}
               </button>
             </div>
