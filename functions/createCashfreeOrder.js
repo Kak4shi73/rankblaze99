@@ -12,13 +12,16 @@ if (!admin.apps.length) {
 // Express app for HTTP endpoints
 const app = express();
 
-// Fix CORS configuration to allow requests from rankblaze.in
-app.use(cors({ 
-  origin: ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5000', '*'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  credentials: true
-}));
+// Remove the previous CORS configuration and add this instead
+app.use(
+  cors({
+    origin: ["https://www.rankblaze.in", "https://rankblaze.in", "http://localhost:3000", "http://localhost:5000"],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept"],
+    credentials: true,
+    maxAge: 86400 // Cache preflight request for 24 hours
+  })
+);
 
 app.use(express.json());
 
@@ -221,10 +224,11 @@ app.post('/createCashfreeOrder', async (req, res) => {
       createdAt: new Date().toISOString(),
     });
 
-    // Set proper CORS headers
-    res.set('Access-Control-Allow-Origin', '*');
+    // Set proper CORS headers explicitly
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    res.set('Access-Control-Allow-Credentials', 'true');
     
     res.status(200).send(response);
   } catch (error) {
@@ -340,10 +344,11 @@ app.post('/verifyCashfreePayment', async (req, res) => {
       });
     }
 
-    // Set proper CORS headers
-    res.set('Access-Control-Allow-Origin', '*');
+    // Set proper CORS headers explicitly
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    res.set('Access-Control-Allow-Credentials', 'true');
     
     res.status(200).send({ isValid: isSuccessful });
   } catch (error) {
@@ -355,12 +360,15 @@ app.post('/verifyCashfreePayment', async (req, res) => {
 });
 
 // Handle preflight OPTIONS requests for all routes
-app.options('*', cors({
-  origin: ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5000', '*'],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  credentials: true
-}));
+app.options('*', (req, res) => {
+  // Set explicit CORS headers for OPTIONS requests
+  res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.set('Access-Control-Allow-Credentials', 'true');
+  res.set('Access-Control-Max-Age', '86400'); // 24 hours
+  res.status(204).send('');
+});
 
 // Export the Express app as a Firebase Function
 exports.api = functions.https.onRequest(app);
