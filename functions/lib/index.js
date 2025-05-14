@@ -1,7 +1,7 @@
 "use strict";
 var _a, _b;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendOTPEmail = void 0;
+exports.getToolSession = exports.sendOTPEmail = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
@@ -59,6 +59,119 @@ exports.sendOTPEmail = functions.https.onCall(async (data, context) => {
     catch (error) {
         console.error('Error sending email:', error);
         throw new functions.https.HttpsError('internal', 'There was an error sending the email.');
+    }
+});
+// Cloud function to get tool session cookies
+exports.getToolSession = functions.https.onCall(async (data, context) => {
+    var _a;
+    try {
+        // Validate the request
+        if (!data.userId || !data.toolId || !data.accessCode) {
+            throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters');
+        }
+        // Verify user has access to the tool
+        const db = admin.database();
+        const subscriptionsRef = db.ref('subscriptions');
+        const subscriptionsSnapshot = await subscriptionsRef.once('value');
+        if (!subscriptionsSnapshot.exists()) {
+            throw new functions.https.HttpsError('not-found', 'No subscriptions found');
+        }
+        const subscriptions = subscriptionsSnapshot.val();
+        // Check if user has access to the requested tool
+        let hasAccess = false;
+        for (const subId in subscriptions) {
+            const sub = subscriptions[subId];
+            if (sub.userId === data.userId && sub.status === 'active') {
+                // Check if tool is included in subscription
+                if (sub.tools && Array.isArray(sub.tools)) {
+                    for (const tool of sub.tools) {
+                        if ((typeof tool === 'string' && tool === data.toolId) ||
+                            (typeof tool === 'object' &&
+                                tool.id === data.toolId &&
+                                tool.status === 'active')) {
+                            hasAccess = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (hasAccess)
+                break;
+        }
+        if (!hasAccess) {
+            throw new functions.https.HttpsError('permission-denied', 'User does not have access to this tool');
+        }
+        // Log the access attempt
+        const accessLogRef = db.ref(`toolAccessLogs/${data.toolId}_${data.userId}_${Date.now()}`);
+        await accessLogRef.set({
+            userId: data.userId,
+            toolId: data.toolId,
+            accessCode: data.accessCode,
+            timestamp: admin.database.ServerValue.TIMESTAMP,
+            source: 'extension',
+            ip: ((_a = context.rawRequest) === null || _a === void 0 ? void 0 : _a.ip) || 'unknown'
+        });
+        // Get tool session data based on the tool ID
+        // In a real implementation, this would fetch actual session cookies from a secure storage
+        // or generate them on-demand based on stored credentials
+        const toolSessions = {
+            'chatgpt_plus': {
+                cookies: [
+                    { name: '_auth_token', value: 'sample_auth_token_1', domain: '.openai.com' },
+                    { name: 'session_id', value: 'sample_session_id_1', domain: '.openai.com' }
+                ],
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days
+            },
+            'envato_elements': {
+                cookies: [
+                    { name: 'elements_session', value: 'sample_session_token_2', domain: '.envato.com' },
+                    { name: 'elements_auth', value: 'sample_auth_token_2', domain: '.envato.com' }
+                ],
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000)
+            },
+            'canva_pro': {
+                cookies: [
+                    { name: 'canva_auth', value: 'sample_auth_token_3', domain: '.canva.com' },
+                    { name: 'canva_session', value: 'sample_session_id_3', domain: '.canva.com' }
+                ],
+                userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000)
+            },
+            'storyblocks': {
+                cookies: [
+                    { name: 'sb_session', value: 'sample_session_token_4', domain: '.storyblocks.com' },
+                    { name: 'sb_auth', value: 'sample_auth_token_4', domain: '.storyblocks.com' }
+                ],
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000)
+            },
+            'semrush': {
+                cookies: [
+                    { name: 'semrush_auth', value: 'sample_auth_token_5', domain: '.semrush.com' },
+                    { name: 'semrush_session', value: 'sample_session_id_5', domain: '.semrush.com' }
+                ],
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000)
+            }
+        };
+        const sessionData = toolSessions[data.toolId];
+        if (!sessionData) {
+            throw new functions.https.HttpsError('not-found', 'Session data not available for this tool');
+        }
+        // Return session data to the extension
+        return {
+            success: true,
+            sessionData: sessionData
+        };
+    }
+    catch (error) {
+        console.error('Error getting tool session:', error);
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        throw new functions.https.HttpsError('internal', 'Failed to get tool session');
     }
 });
 //# sourceMappingURL=index.js.map

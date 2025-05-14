@@ -84,7 +84,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
         amount: Math.round(total * 100) / 100, // Ensure proper rounding
         currency: 'INR',
         customerName: user?.name || '',
-        customerPhone: user?.phone || '9999999999',
+        customerPhone: '9999999999', // Use a default phone number
         customerEmail: user?.email || '',
         notes: {
           userId: user?.id || '',

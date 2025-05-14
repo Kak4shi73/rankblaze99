@@ -1,0 +1,13 @@
+@echo off
+echo Setting active Firebase project...
+call firebase use rankblaze-138f7
+echo Setting Cashfree credentials...
+call firebase functions:config:set cashfree.app_id="9721923531a775ba3e2dcb8259291279"
+call firebase functions:config:set cashfree.secret_key="cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e"
+echo Deploying functions...
+call firebase deploy --only functions
+echo Committing code changes...
+call git add .
+call git commit -m "Fix CORS issues and type errors in payment flow"
+call git push
+echo Done! 

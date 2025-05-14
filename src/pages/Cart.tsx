@@ -88,7 +88,7 @@ const Cart = () => {
           amount: Math.round(total * 100) / 100, // Ensure proper rounding
           currency: 'INR',
           customerName: user?.name || '',
-          customerPhone: user?.phone || '9999999999', // Using a default phone
+          customerPhone: '9999999999', // Use a default phone number since user.phone is not available
           customerEmail: user?.email || '',
           notes: {
             userId: user?.id || '',
