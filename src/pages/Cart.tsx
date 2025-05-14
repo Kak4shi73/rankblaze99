@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CurrencySelector from '../components/cart/CurrencySelector';
 import { Currency, convertCurrency, formatCurrency } from '../utils/currencyConverter';
+import { createOrder } from '../utils/cashfree';
+import { db } from '../config/firebase';
+import { ref, set } from 'firebase/database';
 
 const Cart = () => {
   const { cartItems, removeFromCart, clearCart } = useCart();
@@ -14,6 +17,7 @@ const Cart = () => {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const { user } = useAuth();
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>('INR');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const convertPrice = (price: number): number => {
     return convertCurrency(price, 'INR', selectedCurrency);
@@ -38,18 +42,140 @@ const Cart = () => {
     }
     
     setIsCheckingOut(true);
+    setErrorMessage(null);
     
     try {
-      navigate('/payment', { 
-        state: { 
-          cartItems,
-          total: Math.round(total * 100) / 100
+      showToast('Initiating checkout...', 'info');
+      
+      // Check if Cashfree SDK is available
+      if (typeof window.Cashfree === 'undefined') {
+        throw new Error('Payment gateway not available. Please try again later.');
+      }
+      
+      // Generate a unique order ID
+      const uniqueOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      
+      // Create an order in Cashfree
+      const orderOptions = {
+        amount: Math.round(total * 100) / 100, // Ensure proper rounding
+        currency: 'INR',
+        customerName: user?.name || '',
+        customerPhone: '9999999999', // Using a default phone
+        customerEmail: user?.email || '',
+        notes: {
+          userId: user?.id || '',
+          items: JSON.stringify(cartItems.map(item => ({ id: item.id, name: item.name })))
         }
+      };
+      
+      console.log('Creating order with options:', orderOptions);
+      
+      // Save pending order to database
+      const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
+      await set(pendingOrderRef, {
+        userId: user?.id,
+        amount: Math.round(total * 100) / 100,
+        items: cartItems,
+        status: 'pending',
+        paymentMethod: 'cashfree',
+        createdAt: new Date().toISOString(),
       });
+      
+      // Create order with Cashfree
+      const order = await createOrder(orderOptions);
+      console.log('Order created:', order);
+      
+      if (!order || !order.payment_session_id) {
+        throw new Error('Failed to create order. Please try again.');
+      }
+      
+      // Update order with payment session ID
+      await set(pendingOrderRef, {
+        userId: user?.id,
+        amount: Math.round(total * 100) / 100,
+        items: cartItems,
+        status: 'payment_initiated',
+        paymentMethod: 'cashfree',
+        orderId: order.orderId,
+        paymentSessionId: order.payment_session_id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      
+      showToast('Redirecting to payment gateway...', 'success');
+      
+      // Initialize and open Cashfree checkout
+      const cashfree = new window.Cashfree(order.payment_session_id);
+      
+      // Handle payment events
+      cashfree.on('payment_success', async (data: any) => {
+        console.log('Payment success:', data);
+        showToast('Payment successful!', 'success');
+        
+        // Update order status
+        await set(ref(db, `orders/${uniqueOrderId}`), {
+          userId: user?.id,
+          amount: Math.round(total * 100) / 100,
+          items: cartItems,
+          status: 'completed',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          paymentId: `cf_${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        
+        // Clear cart after successful payment
+        clearCart();
+        
+        // Redirect to dashboard
+        navigate('/dashboard');
+      });
+      
+      cashfree.on('payment_error', (data: any) => {
+        console.error('Payment error:', data);
+        showToast('Payment failed', 'error');
+        setIsCheckingOut(false);
+        
+        // Update order status
+        set(ref(db, `orders/${uniqueOrderId}`), {
+          userId: user?.id,
+          amount: Math.round(total * 100) / 100,
+          items: cartItems,
+          status: 'failed',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          errorMessage: data.error?.reason || 'Unknown error',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      });
+      
+      cashfree.on('close', () => {
+        console.log('Payment window closed');
+        showToast('Payment cancelled', 'info');
+        setIsCheckingOut(false);
+        
+        // Update order status
+        set(ref(db, `orders/${uniqueOrderId}`), {
+          userId: user?.id,
+          amount: Math.round(total * 100) / 100,
+          items: cartItems,
+          status: 'cancelled',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      });
+      
+      // Redirect to Cashfree checkout directly
+      cashfree.redirect();
     } catch (error) {
       console.error('Checkout error:', error);
-      showToast('Payment failed', 'error');
-    } finally {
+      const errorMsg = error instanceof Error ? error.message : 'Payment initialization failed';
+      setErrorMessage(errorMsg);
+      showToast(errorMsg, 'error');
       setIsCheckingOut(false);
     }
   };
@@ -156,6 +282,13 @@ const Cart = () => {
                   <span>Total</span>
                   <span>{formatCurrency(total, selectedCurrency)}</span>
                 </div>
+                
+                {/* Error message display */}
+                {errorMessage && (
+                  <div className="bg-red-900/50 border border-red-600 text-white p-4 rounded-lg">
+                    <p className="text-sm">{errorMessage}</p>
+                  </div>
+                )}
                 
                 <div className="flex flex-col gap-4">
                   <button

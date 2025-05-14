@@ -72,4 +72,9 @@ declare module '../config/firebase' {
   export const db: any;
   export const auth: any;
   export const storage: any;
+}
+
+// Add Cashfree global interface
+interface Window {
+  Cashfree: any;
 } 
