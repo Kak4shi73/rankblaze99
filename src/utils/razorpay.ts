@@ -1,7 +1,8 @@
 import crypto from 'crypto';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
+import { getApp } from 'firebase/app';
 
-// Razorpay key ID for client-side usage
+// Razorpay key ID for client-side usage (public key, safe to expose)
 export const RAZORPAY_KEY_ID = 'rzp_test_OChtDbosOz00ju';
 
 // This should be kept secret and only used on the server
@@ -16,6 +17,20 @@ export interface RazorpayOrderResponse {
 }
 
 /**
+ * Get Firebase functions instance with optional emulator connection
+ */
+const getFunctionsInstance = () => {
+  const functions = getFunctions(getApp());
+  
+  // Uncomment this in development to connect to the emulator
+  // if (process.env.NODE_ENV === 'development') {
+  //   connectFunctionsEmulator(functions, 'localhost', 5001);
+  // }
+  
+  return functions;
+};
+
+/**
  * Creates a new order in Razorpay via Firebase Functions
  */
 export const createOrder = async (options: {
@@ -25,7 +40,8 @@ export const createOrder = async (options: {
   notes?: Record<string, string>;
 }): Promise<RazorpayOrderResponse> => {
   try {
-    const functions = getFunctions();
+    console.log('Creating Razorpay order with Firebase function');
+    const functions = getFunctionsInstance();
     const createRazorpayOrderFn = httpsCallable<typeof options, RazorpayOrderResponse>(
       functions, 
       'createRazorpayOrder'
@@ -38,18 +54,64 @@ export const createOrder = async (options: {
       notes: options.notes || {}
     });
     
-    // The result.data will contain the order details
+    console.log('Order created successfully:', result.data);
     return result.data;
   } catch (error: any) {
     console.error('Razorpay order creation failed:', error);
     
-    // Extract more detailed error message from Firebase Functions if available
-    if (error.code === 'functions/internal') {
-      throw new Error('Internal server error. This could be due to an issue with the Razorpay API or missing dependencies.');
-    } else if (error.details) {
-      throw new Error(`${error.message}: ${error.details}`);
+    if (error.code === 'functions/internal' || error.code === 'functions/unavailable') {
+      console.error('Using HTTP endpoint as fallback...');
+      return createOrderViaHttp(options);
     }
     
+    throw error;
+  }
+};
+
+/**
+ * Fallback method to create order using HTTP function endpoint
+ */
+export const createOrderViaHttp = async (options: {
+  amount: number;
+  currency?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+}): Promise<RazorpayOrderResponse> => {
+  try {
+    // Get the region and project ID from Firebase
+    const functions = getFunctionsInstance();
+    const region = 'us-central1'; // or your specific region
+    const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
+    
+    const url = `https://${region}-${projectId}.cloudfunctions.net/createOrder`;
+    console.log('Calling HTTP endpoint:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        amount: options.amount,
+        currency: options.currency || 'INR',
+        receipt: options.receipt || `receipt_${Date.now()}`,
+        notes: options.notes || {}
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to create order');
+    }
+
+    const data = await response.json();
+    return {
+      orderId: data.orderId,
+      amount: data.amount,
+      currency: data.currency
+    };
+  } catch (error) {
+    console.error('HTTP order creation failed:', error);
     throw error;
   }
 };
@@ -63,7 +125,7 @@ export const verifyPaymentSignature = async (
   signature: string
 ): Promise<boolean> => {
   try {
-    const functions = getFunctions();
+    const functions = getFunctionsInstance();
     const verifyRazorpayPaymentFn = httpsCallable<
       { orderId: string; paymentId: string; signature: string },
       { isValid: boolean }
@@ -75,62 +137,56 @@ export const verifyPaymentSignature = async (
       signature
     });
     
-    // The result.data will contain { isValid: boolean }
     return result.data.isValid;
   } catch (error: any) {
     console.error('Signature verification failed:', error);
     
-    // Log more detailed error information
-    if (error.code === 'functions/internal') {
-      console.error('Internal server error in Firebase Function');
+    if (error.code === 'functions/internal' || error.code === 'functions/unavailable') {
+      console.error('Using HTTP endpoint as fallback...');
+      return verifyPaymentViaHttp(orderId, paymentId, signature);
     }
     
     return false;
   }
 };
 
-// Temporary fallback method to create order directly (for testing)
-export const createOrderDirectly = async (options: {
-  amount: number;
-  currency?: string;
-  receipt?: string;
-  notes?: Record<string, string>;
-}): Promise<any> => {
+/**
+ * Fallback method to verify payment using HTTP function endpoint
+ */
+export const verifyPaymentViaHttp = async (
+  orderId: string,
+  paymentId: string,
+  signature: string
+): Promise<boolean> => {
   try {
-    // WARNING: This is NOT secure for production - API key should never be on client
-    // This is only for testing/demo purposes
-    console.warn('Using direct API call - NOT SECURE FOR PRODUCTION');
+    // Get the region and project ID from Firebase
+    const region = 'us-central1'; // or your specific region
+    const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
     
-    const KEY_SECRET = '0A8EfMcUW90DE57mNtffGeqy'; // Should never be in client code
+    const url = `https://${region}-${projectId}.cloudfunctions.net/verifyPayment`;
     
-    const response = await fetch('https://api.razorpay.com/v1/orders', {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${KEY_SECRET}`)
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        amount: options.amount,
-        currency: options.currency || 'INR',
-        receipt: options.receipt || `receipt_${Date.now()}`,
-        notes: options.notes || {}
+        orderId,
+        paymentId,
+        signature
       })
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error?.description || 'Failed to create order');
+      throw new Error(errorData.error || 'Failed to verify payment');
     }
 
     const data = await response.json();
-    return {
-      orderId: data.id,
-      amount: data.amount,
-      currency: data.currency
-    };
+    return data.isValid;
   } catch (error) {
-    console.error('Direct order creation failed:', error);
-    throw error;
+    console.error('HTTP payment verification failed:', error);
+    return false;
   }
 };
 

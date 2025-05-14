@@ -7,9 +7,13 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Export the Razorpay functions
+// Export the Razorpay callable functions
 exports.createRazorpayOrder = razorpayFunctions.createRazorpayOrder;
 exports.verifyRazorpayPayment = razorpayFunctions.verifyRazorpayPayment;
+
+// Export the Razorpay HTTP endpoints
+exports.createOrder = razorpayFunctions.createRazorpayOrderHttp;
+exports.verifyPayment = razorpayFunctions.verifyRazorpayPaymentHttp;
 
 // Re-export existing functions (if they exist)
 try {
