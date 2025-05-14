@@ -45,7 +45,7 @@ const RefundPolicy = () => {
             </p>
             <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
               <li>The amount will be credited to your original payment method</li>
-              <li>Processing time is <span className="text-amber-400 font-medium">5-7 working days</span></li>
+              <li className="whitespace-nowrap">Processing time is <span className="text-amber-400 font-medium">5-7 working days</span></li>
               <li>You will receive a confirmation email once the refund is processed</li>
             </ul>
 
