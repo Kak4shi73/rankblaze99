@@ -4,7 +4,7 @@ import { CreditCard, Check, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
-import { ref, set } from 'firebase/database';
+import { ref, set, serverTimestamp } from 'firebase/database';
 import { 
   createOrder,
   verifyPaymentStatus, 
@@ -67,6 +67,9 @@ const PaymentPage = () => {
       
       showToast('Creating order...', 'info');
       
+      // Generate a unique order ID
+      const uniqueOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      
       // Create an order in Cashfree - amount in rupees (Cashfree accepts decimal amount)
       const orderOptions = {
         amount: total,
@@ -82,6 +85,17 @@ const PaymentPage = () => {
       
       console.log('Order options:', orderOptions);
       
+      // Save pending order to database
+      const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
+      await set(pendingOrderRef, {
+        userId: user?.id,
+        amount: total,
+        items: cartItems,
+        status: 'pending',
+        paymentMethod: 'cashfree',
+        createdAt: new Date().toISOString(),
+      });
+      
       // Use Firebase function to create the order securely
       const order = await createOrder(orderOptions);
       console.log('Order created:', order);
@@ -91,6 +105,19 @@ const PaymentPage = () => {
       if (!order || !order.payment_session_id) {
         throw new Error('Failed to create order. No payment session ID returned.');
       }
+      
+      // Update order with payment session ID
+      await set(pendingOrderRef, {
+        userId: user?.id,
+        amount: total,
+        items: cartItems,
+        status: 'payment_initiated',
+        paymentMethod: 'cashfree',
+        orderId: order.orderId,
+        paymentSessionId: order.payment_session_id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
       
       showToast('Order created successfully!', 'success');
       
@@ -108,11 +135,38 @@ const PaymentPage = () => {
         setIsProcessing(false);
         setErrorMessage('Payment failed: ' + (data.error?.reason || 'Unknown error'));
         showToast('Payment failed', 'error');
+        
+        // Update order status
+        set(ref(db, `orders/${uniqueOrderId}`), {
+          userId: user?.id,
+          amount: total,
+          items: cartItems,
+          status: 'failed',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          paymentSessionId: order.payment_session_id,
+          errorMessage: data.error?.reason || 'Unknown error',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
       });
       
       cashfree.on('close', () => {
         setIsProcessing(false);
         showToast('Payment cancelled', 'info');
+        
+        // Update order status
+        set(ref(db, `orders/${uniqueOrderId}`), {
+          userId: user?.id,
+          amount: total,
+          items: cartItems,
+          status: 'cancelled',
+          paymentMethod: 'cashfree',
+          orderId: order.orderId,
+          paymentSessionId: order.payment_session_id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
       });
       
       // Open Cashfree checkout with proper config
@@ -184,6 +238,19 @@ const PaymentPage = () => {
         };
         await set(subscriptionRef, subscriptionData);
       }
+      
+      // Update order status
+      const orderRef = ref(db, `orders/${orderId}`);
+      await set(orderRef, {
+        userId: user?.id,
+        amount: total,
+        items: cartItems,
+        status: 'completed',
+        paymentMethod: 'cashfree',
+        paymentId: paymentId,
+        createdAt: now,
+        updatedAt: now
+      });
 
       setIsProcessing(false);
       showToast('Payment successful!', 'success');

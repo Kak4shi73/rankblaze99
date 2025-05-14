@@ -5,6 +5,7 @@ import { getAnalytics } from 'firebase/analytics';
 import { getDatabase } from 'firebase/database';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { siteConfig } from './site';
+import { getFunctions } from 'firebase/functions';
 
 // Firebase configuration with hardcoded values to ensure deployment works
 const firebaseConfig = {
@@ -24,9 +25,10 @@ const app = initializeApp(firebaseConfig);
 // Initialize services after app initialization
 const auth = getAuth(app);
 const firestore = getFirestore(app);
+const db = getDatabase(app);
+const functions = getFunctions(app);
 // Only initialize analytics in browser environment
 const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
-const db = getDatabase(app);
 
 // Initialize collections
 const collections = {
@@ -96,5 +98,5 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export { collections, auth, firestore, analytics, db };
+export { collections, auth, firestore, analytics, db, functions };
 export default app;
