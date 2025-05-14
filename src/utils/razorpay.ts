@@ -40,8 +40,16 @@ export const createOrder = async (options: {
     
     // The result.data will contain the order details
     return result.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Razorpay order creation failed:', error);
+    
+    // Extract more detailed error message from Firebase Functions if available
+    if (error.code === 'functions/internal') {
+      throw new Error('Internal server error. This could be due to an issue with the Razorpay API or missing dependencies.');
+    } else if (error.details) {
+      throw new Error(`${error.message}: ${error.details}`);
+    }
+    
     throw error;
   }
 };
@@ -69,9 +77,60 @@ export const verifyPaymentSignature = async (
     
     // The result.data will contain { isValid: boolean }
     return result.data.isValid;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Signature verification failed:', error);
+    
+    // Log more detailed error information
+    if (error.code === 'functions/internal') {
+      console.error('Internal server error in Firebase Function');
+    }
+    
     return false;
+  }
+};
+
+// Temporary fallback method to create order directly (for testing)
+export const createOrderDirectly = async (options: {
+  amount: number;
+  currency?: string;
+  receipt?: string;
+  notes?: Record<string, string>;
+}): Promise<any> => {
+  try {
+    // WARNING: This is NOT secure for production - API key should never be on client
+    // This is only for testing/demo purposes
+    console.warn('Using direct API call - NOT SECURE FOR PRODUCTION');
+    
+    const KEY_SECRET = '0A8EfMcUW90DE57mNtffGeqy'; // Should never be in client code
+    
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${KEY_SECRET}`)
+      },
+      body: JSON.stringify({
+        amount: options.amount,
+        currency: options.currency || 'INR',
+        receipt: options.receipt || `receipt_${Date.now()}`,
+        notes: options.notes || {}
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.description || 'Failed to create order');
+    }
+
+    const data = await response.json();
+    return {
+      orderId: data.id,
+      amount: data.amount,
+      currency: data.currency
+    };
+  } catch (error) {
+    console.error('Direct order creation failed:', error);
+    throw error;
   }
 };
 
