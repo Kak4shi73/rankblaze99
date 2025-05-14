@@ -6,16 +6,16 @@ import { getDatabase } from 'firebase/database';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { siteConfig } from './site';
 
-// Firebase configuration prioritizing environment variables
+// Firebase configuration with hardcoded values to ensure deployment works
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBx-OgBVYWuf6v4Hm-3ifmCkoVxmD8YNXE",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "rankblaze-138f7.firebaseapp.com",
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://rankblaze-138f7-default-rtdb.firebaseio.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "rankblaze-138f7",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "rankblaze-138f7.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "680403545243",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:680403545243:web:30cf242c831c444c272a3e",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-9WDFHPN17P"
+  apiKey: "AIzaSyBx-OgBVYWuf6v4Hm-3ifmCkoVxmD8YNXE",
+  authDomain: "rankblaze-138f7.firebaseapp.com",
+  databaseURL: "https://rankblaze-138f7-default-rtdb.firebaseio.com",
+  projectId: "rankblaze-138f7",
+  storageBucket: "rankblaze-138f7.firebasestorage.app",
+  messagingSenderId: "680403545243",
+  appId: "1:680403545243:web:30cf242c831c444c272a3e",
+  measurementId: "G-9WDFHPN17P"
 };
 
 // Initialize Firebase app first
@@ -43,7 +43,8 @@ const collections = {
 const initializeAdmin = async () => {
   try {
     // Skip admin initialization in development environment
-    if (import.meta.env.DEV) {
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) {
       console.log('Skipping admin initialization in development environment');
       return;
     }
