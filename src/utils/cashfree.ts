@@ -80,9 +80,9 @@ export const createOrderViaHttp = async (options: {
   notes?: Record<string, string>;
 }): Promise<CashfreeOrderResponse> => {
   try {
-    // Get the region and project ID from Firebase
-    const region = 'us-central1'; // or your specific region
-    const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
+    // Get the region and project ID from Firebase - using the correct project ID
+    const region = 'us-central1';
+    const projectId = 'rankblaze-138f7';
     
     const url = `https://${region}-${projectId}.cloudfunctions.net/api/createCashfreeOrder`;
     console.log('Calling HTTP endpoint:', url);
@@ -90,7 +90,8 @@ export const createOrderViaHttp = async (options: {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         amount: options.amount,
@@ -160,16 +161,17 @@ export const verifyPaymentViaHttp = async (
   orderAmount?: number
 ): Promise<boolean> => {
   try {
-    // Get the region and project ID from Firebase
-    const region = 'us-central1'; // or your specific region
-    const projectId = process.env.FIREBASE_PROJECT_ID || 'rankblaze-138f7'; // Use your actual project ID
+    // Get the region and project ID from Firebase - using the correct project ID
+    const region = 'us-central1';
+    const projectId = 'rankblaze-138f7';
     
     const url = `https://${region}-${projectId}.cloudfunctions.net/api/verifyCashfreePayment`;
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         orderId,

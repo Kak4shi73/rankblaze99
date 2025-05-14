@@ -5,24 +5,48 @@ const Cashfree = require('cashfree-pg-sdk-nodejs');
 
 // Express app for HTTP endpoints
 const app = express();
-app.use(cors({ origin: true }));
+app.use(cors({ 
+  origin: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+}));
 app.use(express.json());
 
 // Get the Cashfree credentials from Firebase config
 // In local development, you can use environment variables as fallback
 const getConfig = () => {
+  let appId, secretKey;
+  
+  try {
+    appId = functions.config().cashfree?.app_id;
+    secretKey = functions.config().cashfree?.secret_key;
+  } catch (error) {
+    console.log('Error reading Firebase config, using fallback values:', error);
+  }
+  
   return {
     env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
-    clientId: functions.config().cashfree?.app_id || process.env.CASHFREE_APP_ID || '9721923531a775ba3e2dcb8259291279',
-    clientSecret: functions.config().cashfree?.secret_key || process.env.CASHFREE_SECRET_KEY || 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e',
+    clientId: appId || process.env.CASHFREE_APP_ID || '9721923531a775ba3e2dcb8259291279',
+    clientSecret: secretKey || process.env.CASHFREE_SECRET_KEY || 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e',
   };
 };
 
 // Initialize Cashfree SDK
 const initializeCashfree = () => {
   const config = getConfig();
-  Cashfree.PG.initialize(config);
-  return Cashfree;
+  console.log('Initializing Cashfree with config:', {
+    env: config.env,
+    clientId: config.clientId,
+    clientSecret: '***' // Hiding secret key in logs
+  });
+  
+  try {
+    Cashfree.PG.initialize(config);
+    return Cashfree;
+  } catch (error) {
+    console.error('Error initializing Cashfree:', error);
+    throw error;
+  }
 };
 
 /**
@@ -74,6 +98,8 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
         customer_phone: customerPhone || '9999999999',
       },
     };
+
+    console.log('Creating Cashfree order with request:', orderRequest);
 
     // Create the order with Cashfree
     const response = await Cashfree.PG.orders.create(orderRequest);
@@ -127,10 +153,17 @@ app.post('/createCashfreeOrder', async (req, res) => {
       },
     };
 
+    console.log('Creating Cashfree order via HTTP with request:', orderRequest);
+
     // Create the order with Cashfree
     const response = await Cashfree.PG.orders.create(orderRequest);
     console.log('Cashfree order created successfully via HTTP:', response);
 
+    // Set proper CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    
     res.status(200).send(response);
   } catch (error) {
     console.error('Error creating Cashfree order:', error);
@@ -211,6 +244,11 @@ app.post('/verifyCashfreePayment', async (req, res) => {
       (orderAmount ? parseFloat(payment.payment_amount) === parseFloat(orderAmount) : true)
     );
 
+    // Set proper CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    
     res.status(200).send({ isValid: isSuccessful });
   } catch (error) {
     console.error('Error verifying Cashfree payment:', error);
@@ -220,12 +258,26 @@ app.post('/verifyCashfreePayment', async (req, res) => {
   }
 });
 
+// Handle preflight OPTIONS requests for all routes
+app.options('*', cors());
+
 // Export the Express app as a Firebase Function
 exports.api = functions.https.onRequest(app);
 
 // Export additional Cashfree webhooks if needed
 exports.cashfreeWebhook = functions.https.onRequest(async (req, res) => {
   try {
+    // Set CORS headers
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    
+    // Handle OPTIONS preflight request
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    
     // Verify webhook signature to ensure it's from Cashfree
     // Implementation depends on Cashfree webhook documentation
     

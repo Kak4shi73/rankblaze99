@@ -12,6 +12,12 @@ import {
 
 type PaymentMethod = 'cashfree';
 
+declare global {
+  interface Window {
+    Cashfree: any;
+  }
+}
+
 const PaymentPage = () => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cashfree');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -23,6 +29,18 @@ const PaymentPage = () => {
   const { showToast } = useToast();
   const cartItems = location.state?.cartItems || [];
   const total = location.state?.total || 0;
+  
+  // Check if Cashfree SDK is loaded
+  useEffect(() => {
+    if (!window.Cashfree) {
+      const script = document.createElement('script');
+      script.src = 'https://sdk.cashfree.com/js/ui/2.0.0/cashfree.prod.js';
+      script.async = true;
+      script.onload = () => console.log('Cashfree SDK loaded dynamically');
+      script.onerror = () => setErrorMessage('Failed to load Cashfree SDK');
+      document.head.appendChild(script);
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -42,6 +60,11 @@ const PaymentPage = () => {
       setIsCreatingOrder(true);
       setErrorMessage(null);
       
+      // Make sure the Cashfree SDK is available
+      if (!window.Cashfree) {
+        throw new Error('Cashfree SDK not loaded. Please refresh the page and try again.');
+      }
+      
       showToast('Creating order...', 'info');
       
       // Create an order in Cashfree - amount in rupees (Cashfree accepts decimal amount)
@@ -57,8 +80,11 @@ const PaymentPage = () => {
         }
       };
       
+      console.log('Order options:', orderOptions);
+      
       // Use Firebase function to create the order securely
       const order = await createOrder(orderOptions);
+      console.log('Order created:', order);
       
       setIsCreatingOrder(false);
       
@@ -69,7 +95,7 @@ const PaymentPage = () => {
       showToast('Order created successfully!', 'success');
       
       // Initialize Cashfree drop-in checkout
-      const cashfree = new (window as any).Cashfree(order.payment_session_id);
+      const cashfree = new window.Cashfree(order.payment_session_id);
       
       // Handle payment events
       cashfree.on('payment_success', (data: any) => {
@@ -89,8 +115,13 @@ const PaymentPage = () => {
         showToast('Payment cancelled', 'info');
       });
       
-      // Open Cashfree checkout
-      cashfree.redirect();
+      // Open Cashfree checkout with proper config
+      try {
+        cashfree.redirect();
+      } catch (error) {
+        console.error('Error during Cashfree redirect:', error);
+        throw new Error('Unable to open payment gateway. Please try again.');
+      }
     } catch (error) {
       console.error('Payment initialization error:', error);
       setIsProcessing(false);
