@@ -9,6 +9,12 @@ import { Currency, convertCurrency, formatCurrency } from '../utils/currencyConv
 import { createOrder } from '../utils/cashfree';
 import { db } from '../config/firebase';
 import { ref, set, get } from 'firebase/database';
+import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
+
+// Firestore database instance
+const firestore = getFirestore();
+// Firestore collection name for orders
+const ORDERS_COLLECTION = 'Cashfree orders';
 
 const Cart = () => {
   const { cartItems, removeFromCart, clearCart, pendingOrderId, isCreatingOrder: isPreparingOrder } = useCart();
@@ -28,6 +34,26 @@ const Cart = () => {
   const transactionFee = convertedSubtotal * 0.022; // 2.2% transaction fee
   const gstOnFee = transactionFee * 0.18; // 18% GST on transaction fee
   const total = convertedSubtotal + transactionFee + gstOnFee;
+
+  // Helper function to save order to both Realtime DB and Firestore
+  const saveOrderData = async (orderId: string, orderData: any) => {
+    try {
+      // Save to Realtime Database
+      const rtdbRef = ref(db, `orders/${orderId}`);
+      await set(rtdbRef, orderData);
+      
+      // Save to Firestore
+      const firestoreRef = doc(firestore, ORDERS_COLLECTION, orderId);
+      await setDoc(firestoreRef, {
+        ...orderData,
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now()
+      });
+    } catch (error) {
+      console.error('Error saving order data:', error);
+      // Continue execution even if saving to one DB fails
+    }
+  };
 
   const handleCheckout = async () => {
     if (!user) {
@@ -98,16 +124,17 @@ const Cart = () => {
         
         console.log('Creating new order with options:', orderOptions);
         
-        // Save pending order to database
-        const pendingOrderRef = ref(db, `orders/${uniqueOrderId}`);
-        await set(pendingOrderRef, {
+        // Save pending order to both databases
+        const orderData = {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
           status: 'pending',
           paymentMethod: 'cashfree',
           createdAt: new Date().toISOString(),
-        });
+        };
+        
+        await saveOrderData(uniqueOrderId, orderData);
         
         // Create order with Cashfree
         const order = await createOrder(orderOptions);
@@ -119,8 +146,8 @@ const Cart = () => {
         
         paymentSessionId = order.payment_session_id;
         
-        // Update order with payment session ID
-        await set(pendingOrderRef, {
+        // Update order with payment session ID in both databases
+        const updatedOrderData = {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
@@ -130,7 +157,9 @@ const Cart = () => {
           paymentSessionId: order.payment_session_id,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+        
+        await saveOrderData(order.orderId, updatedOrderData);
       }
       
       showToast('Redirecting to payment gateway...', 'success');
@@ -143,8 +172,8 @@ const Cart = () => {
         console.log('Payment success:', data);
         showToast('Payment successful!', 'success');
         
-        // Update order status
-        await set(ref(db, `orders/${orderId}`), {
+        // Update order status in both databases
+        const completedOrderData = {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
@@ -154,7 +183,9 @@ const Cart = () => {
           paymentId: `cf_${Date.now()}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+        
+        await saveOrderData(orderId, completedOrderData);
         
         // Clear cart after successful payment
         clearCart();
@@ -168,8 +199,8 @@ const Cart = () => {
         showToast('Payment failed', 'error');
         setIsCheckingOut(false);
         
-        // Update order status
-        set(ref(db, `orders/${orderId}`), {
+        // Update order status in both databases
+        const failedOrderData = {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
@@ -179,7 +210,9 @@ const Cart = () => {
           errorMessage: data.error?.reason || 'Unknown error',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+        
+        saveOrderData(orderId, failedOrderData);
       });
       
       cashfree.on('close', () => {
@@ -187,8 +220,8 @@ const Cart = () => {
         showToast('Payment cancelled', 'info');
         setIsCheckingOut(false);
         
-        // Update order status
-        set(ref(db, `orders/${orderId}`), {
+        // Update order status in both databases
+        const cancelledOrderData = {
           userId: user?.id,
           amount: Math.round(total * 100) / 100,
           items: cartItems,
@@ -197,7 +230,9 @@ const Cart = () => {
           orderId: orderId,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+        
+        saveOrderData(orderId, cancelledOrderData);
       });
       
       // Redirect to Cashfree checkout directly

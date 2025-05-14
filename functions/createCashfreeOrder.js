@@ -62,6 +62,9 @@ const initializeCashfree = () => {
   }
 };
 
+// Update the Firestore collection name for saving orders
+const ORDERS_COLLECTION = 'Cashfree orders';
+
 /**
  * Creates a new Cashfree order
  * This function can be called as a Firebase callable function
@@ -119,7 +122,7 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
     console.log('Cashfree order created successfully:', response);
 
     // Save order to Firestore
-    await admin.firestore().collection('orders').doc(response.order_id).set({
+    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set({
       order_id: response.order_id,
       payment_session_id: response.payment_session_id,
       amount: response.order_amount,
@@ -199,7 +202,7 @@ app.post('/createCashfreeOrder', async (req, res) => {
     console.log('Cashfree order created successfully via HTTP:', response);
 
     // Save order to Firestore
-    await admin.firestore().collection('orders').doc(response.order_id).set({
+    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set({
       order_id: response.order_id,
       payment_session_id: response.payment_session_id,
       amount: response.order_amount,
@@ -277,7 +280,7 @@ exports.verifyCashfreePayment = functions.https.onCall(async (data, context) => 
 
     // Update order status in Firestore if payment is successful
     if (isSuccessful) {
-      await admin.firestore().collection('orders').doc(orderId).update({
+      await admin.firestore().collection(ORDERS_COLLECTION).doc(orderId).update({
         status: 'completed',
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
         payment_verified: true,
@@ -329,7 +332,7 @@ app.post('/verifyCashfreePayment', async (req, res) => {
 
     // Update order status in Firestore if payment is successful
     if (isSuccessful) {
-      await admin.firestore().collection('orders').doc(orderId).update({
+      await admin.firestore().collection(ORDERS_COLLECTION).doc(orderId).update({
         status: 'completed',
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
         payment_verified: true,
@@ -399,7 +402,7 @@ exports.cashfreeWebhook = functions.https.onRequest(async (req, res) => {
       const orderId = event.data.order.order_id;
       
       // Update Firestore
-      await admin.firestore().collection('orders').doc(orderId).update({
+      await admin.firestore().collection(ORDERS_COLLECTION).doc(orderId).update({
         status: 'completed',
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
         payment_verified: true,
