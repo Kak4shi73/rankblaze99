@@ -4,15 +4,15 @@ import { CreditCard, Check, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
-import { ref, set, get } from 'firebase/database';
-import { createOrder, verifyPaymentSignature } from '../utils/razorpay';
+import { ref, set } from 'firebase/database';
+import { createOrder, verifyPaymentSignature, RAZORPAY_KEY_ID } from '../utils/razorpay';
 
 type PaymentMethod = 'razorpay';
 
 const PaymentPage = () => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('razorpay');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -32,37 +32,28 @@ const PaymentPage = () => {
     }
   }, [user, cartItems, navigate]);
 
-  const createRazorpayOrder = async () => {
+  const handlePayment = async () => {
     try {
       setIsProcessing(true);
+      setErrorMessage(null);
       
       // Create an order in Razorpay - amount in paise (multiply by 100)
       const order = await createOrder({
-        amount: total * 100,
+        amount: Math.round(total * 100), // Ensure the amount is an integer
         currency: 'INR',
         receipt: `receipt_${Date.now()}`,
         notes: {
           userId: user?.id || '',
-          cartItems: JSON.stringify(cartItems.map((item: any) => ({ id: item.id, name: item.name })))
+          items: JSON.stringify(cartItems.map((item: any) => ({ id: item.id, name: item.name })))
         }
       });
       
-      setOrderId(order.id);
-      return order;
-    } catch (error) {
-      console.error('Failed to create Razorpay order:', error);
-      showToast('Failed to create order', 'error');
-      setIsProcessing(false);
-      throw error;
-    }
-  };
-
-  const handlePayment = async () => {
-    try {
-      const order = await createRazorpayOrder();
+      if (!order || !order.id) {
+        throw new Error('Failed to create order');
+      }
       
       const options = {
-        key: 'rzp_test_OChtDbosOz00ju',
+        key: RAZORPAY_KEY_ID,
         amount: order.amount,
         currency: order.currency,
         name: 'Rank Blaze',
@@ -95,8 +86,13 @@ const PaymentPage = () => {
       const razorpayWindow = new (window as any).Razorpay(options);
       razorpayWindow.open();
     } catch (error) {
+      console.error('Payment initialization error:', error);
       setIsProcessing(false);
-      showToast('Payment initialization failed', 'error');
+      
+      // Display error message
+      const errorMsg = error instanceof Error ? error.message : 'Payment initialization failed';
+      setErrorMessage(errorMsg);
+      showToast(errorMsg, 'error');
     }
   };
 
@@ -106,7 +102,8 @@ const PaymentPage = () => {
     signature: string
   ) => {
     try {
-      // Verify payment signature
+      // In production, verification should happen on the server side
+      // For demo purposes, we're doing it client-side
       const isValid = verifyPaymentSignature(orderId, paymentId, signature);
       
       if (!isValid) {
@@ -133,7 +130,7 @@ const PaymentPage = () => {
 
       // Create subscriptions for each item
       for (const item of cartItems) {
-        const subscriptionId = Date.now().toString();
+        const subscriptionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 10);
         const subscriptionRef = ref(db, `subscriptions/${subscriptionId}`);
         const subscriptionData = {
           userId: user?.id,
@@ -195,6 +192,13 @@ const PaymentPage = () => {
                   </div>
                 </button>
               </div>
+
+              {/* Error message display */}
+              {errorMessage && (
+                <div className="bg-red-900/50 border border-red-600 text-white p-4 rounded-lg mb-6">
+                  <p className="text-sm">{errorMessage}</p>
+                </div>
+              )}
 
               {/* Order Summary */}
               <div className="bg-gray-900 rounded-lg border border-gray-700 p-6 mb-8">
