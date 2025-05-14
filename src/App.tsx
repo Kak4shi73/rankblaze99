@@ -18,6 +18,8 @@ import Admin from './pages/Admin';
 import AdminLogin from './pages/AdminLogin';
 import UpdateTokens from './pages/UpdateTokens';
 import Reviews from './pages/Reviews';
+import About from './pages/About';
+import FAQ from './pages/FAQ';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -48,6 +50,8 @@ function App() {
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/tools" element={<Tools />} />
+                    <Route path="/about" element={<About />} />
+                    <Route path="/faq" element={<FAQ />} />
                     <Route 
                       path="/dashboard" 
                       element={
