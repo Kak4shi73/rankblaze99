@@ -36,10 +36,20 @@ const RefundPolicy = () => {
               <li>Contact our support team</li>
               <li>Provide your account details</li>
               <li>Explain your refund reason</li>
-              <li>Allow 5-10 business days for processing</li>
+              <li>Allow 5-7 working days for processing</li>
+            </ul>
+            
+            <h2 className="text-2xl font-semibold text-white mb-6">4. Refund Timeframe</h2>
+            <p className="text-indigo-200 mb-6">
+              Once your refund is approved:
+            </p>
+            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
+              <li>The amount will be credited to your original payment method</li>
+              <li>Processing time is <span className="text-amber-400 font-medium">5-7 working days</span></li>
+              <li>You will receive a confirmation email once the refund is processed</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">4. Contact Information</h2>
+            <h2 className="text-2xl font-semibold text-white mb-6">5. Contact Information</h2>
             <p className="text-indigo-200">
               For refund requests or questions, please contact us at:<br />
               Email: aryansingh2611@outlook.com<br />

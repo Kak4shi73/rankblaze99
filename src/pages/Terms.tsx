@@ -14,14 +14,18 @@ const Terms = () => {
 
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-8">
           <div className="prose prose-invert max-w-none">
+            <p className="text-amber-400 mb-6 font-medium">
+              This business is managed by Aryan Singh.
+            </p>
+            
             <h2 className="text-2xl font-semibold text-white mb-6">1. Acceptance of Terms</h2>
             <p className="text-indigo-200 mb-6">
-              By accessing and using NXTGEN's services, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.
+              By accessing and using RANKBLAZE's services, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.
             </p>
 
             <h2 className="text-2xl font-semibold text-white mb-6">2. Subscription Services</h2>
             <p className="text-indigo-200 mb-4">
-              NXTGEN provides subscription-based access to developer tools and services. By subscribing to our services, you agree to:
+              RANKBLAZE provides subscription-based access to developer tools and services. By subscribing to our services, you agree to:
             </p>
             <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
               <li>Pay the subscription fees as per your chosen plan</li>
@@ -43,7 +47,7 @@ const Terms = () => {
 
             <h2 className="text-2xl font-semibold text-white mb-6">4. Intellectual Property</h2>
             <p className="text-indigo-200 mb-6">
-              All content, trademarks, and intellectual property on NXTGEN belong to us or our licensors. Users may not copy, modify, or distribute our content without permission.
+              All content, trademarks, and intellectual property on RANKBLAZE belong to us or our licensors. Users may not copy, modify, or distribute our content without permission.
             </p>
 
             <h2 className="text-2xl font-semibold text-white mb-6">5. Termination</h2>
@@ -53,7 +57,7 @@ const Terms = () => {
 
             <h2 className="text-2xl font-semibold text-white mb-6">6. Changes to Terms</h2>
             <p className="text-indigo-200 mb-6">
-              NXTGEN may modify these terms at any time. Continued use of our services after changes constitutes acceptance of the new terms.
+              RANKBLAZE may modify these terms at any time. Continued use of our services after changes constitutes acceptance of the new terms.
             </p>
 
             <h2 className="text-2xl font-semibold text-white mb-6">7. Contact</h2>

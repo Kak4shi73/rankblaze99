@@ -7,10 +7,10 @@ const About = () => {
         {/* Hero Section */}
         <div className="text-center mb-16">
           <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">
-            About NXTGEN
+            About RANKBLAZE
           </h1>
           <p className="text-xl text-indigo-100 opacity-80 max-w-3xl mx-auto">
-            Empowering developers with next-generation tools and solutions
+            Empowering developers and creators with premium tools and services
           </p>
         </div>
 
@@ -18,8 +18,22 @@ const About = () => {
         <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-8 mb-12 border border-gray-700">
           <h2 className="text-2xl font-bold text-white mb-4">Our Mission</h2>
           <p className="text-indigo-200 text-lg leading-relaxed">
-            At NXTGEN, we're on a mission to democratize access to premium developer tools. We believe that every developer, regardless of their budget, should have access to the best tools in the industry. By bundling premium services at an affordable price, we're making professional development tools accessible to everyone.
+            At RANKBLAZE, we're on a mission to democratize access to premium developer and creative tools. We believe that everyone, regardless of their budget, should have access to the best tools in the industry. By bundling premium services at an affordable price, we're making professional tools accessible to everyone.
           </p>
+        </div>
+
+        {/* Admin Information */}
+        <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-8 mb-12 border border-gray-700">
+          <h2 className="text-2xl font-bold text-white mb-4">Meet Our Founder</h2>
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+            <div className="bg-indigo-900/30 p-6 rounded-xl border border-indigo-700 w-full md:w-auto">
+              <h3 className="text-xl font-semibold text-white mb-1">Aryan Singh</h3>
+              <p className="text-indigo-300 mb-4">Founder & CEO</p>
+              <p className="text-indigo-200">
+                Aryan is passionate about making premium tools accessible to everyone. With a background in software development and digital marketing, he founded RANKBLAZE to bridge the gap between high-quality tools and affordability.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Key Features */}
@@ -28,9 +42,9 @@ const About = () => {
             <div className="bg-indigo-600 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
               <Users className="h-6 w-6 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">10,000+ Users</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">5,000+ Users</h3>
             <p className="text-indigo-200">
-              Trusted by thousands of developers worldwide for their daily development needs.
+              Trusted by thousands of developers and creators worldwide for their daily needs.
             </p>
           </div>
 
@@ -40,7 +54,7 @@ const About = () => {
             </div>
             <h3 className="text-xl font-semibold text-white mb-2">Premium Quality</h3>
             <p className="text-indigo-200">
-              Curated selection of high-quality tools and services for professional development.
+              Curated selection of high-quality tools and services for professionals.
             </p>
           </div>
 
@@ -70,10 +84,10 @@ const About = () => {
           <div className="bg-gray-800/50 backdrop-blur-xl rounded-2xl p-8 border border-gray-700">
             <h2 className="text-2xl font-bold text-white mb-4">Our Story</h2>
             <p className="text-indigo-200 mb-4">
-              Founded in 2025, NXTGEN emerged from a simple observation: developers were spending too much on individual tool subscriptions. We saw an opportunity to create a platform that would bundle premium tools together, making them more accessible and affordable.
+              RANKBLAZE was founded with a clear vision: to make premium tools accessible to everyone. We recognized that many professionals and creators were spending too much on individual tool subscriptions, creating a significant barrier to entry for many talented individuals.
             </p>
             <p className="text-indigo-200">
-              Today, we're proud to serve a global community of developers, helping them build better software with access to the best tools in the industry. Our commitment to innovation, quality, and affordability continues to drive our mission forward.
+              Today, we're proud to serve a global community, helping them create better projects with access to the best tools in the industry. Our commitment to accessibility, quality, and affordability continues to drive our mission forward.
             </p>
           </div>
 
@@ -86,7 +100,7 @@ const About = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1">Innovation</h3>
-                  <p className="text-indigo-200">Constantly evolving and improving our services to meet developer needs.</p>
+                  <p className="text-indigo-200">Constantly evolving and improving our services to meet user needs.</p>
                 </div>
               </li>
               <li className="flex items-start">
@@ -95,7 +109,7 @@ const About = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1">Accessibility</h3>
-                  <p className="text-indigo-200">Making premium tools accessible to developers of all backgrounds.</p>
+                  <p className="text-indigo-200">Making premium tools accessible to everyone, regardless of budget.</p>
                 </div>
               </li>
               <li className="flex items-start">
@@ -113,9 +127,9 @@ const About = () => {
 
         {/* CTA Section */}
         <div className="bg-gradient-to-r from-indigo-900 to-purple-900 rounded-2xl p-8 md:p-12 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Join the NXTGEN Community</h2>
+          <h2 className="text-3xl font-bold text-white mb-4">Join the RANKBLAZE Community</h2>
           <p className="text-xl text-indigo-200 mb-8 max-w-2xl mx-auto">
-            Be part of the next generation of developers who are building the future with premium tools at affordable prices.
+            Be part of a growing community of professionals who are creating the future with premium tools at affordable prices.
           </p>
           <a
             href="/signup"

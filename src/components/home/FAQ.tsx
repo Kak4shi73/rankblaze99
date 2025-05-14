@@ -26,6 +26,26 @@ const faqs = [
     question: 'What payment methods do you accept?',
     answer: 'We accept all major credit cards (Visa, Mastercard, American Express), PayPal, and for enterprise customers, we can arrange invoicing with net-30 payment terms.',
   },
+  {
+    question: 'How do I get access to the tools after subscribing?',
+    answer: 'Once your payment is confirmed, you\'ll immediately get access to all the tools included in your subscription through your RANKBLAZE dashboard. You\'ll find login credentials or access instructions for each tool in your account.',
+  },
+  {
+    question: 'Can I share my subscription with friends or colleagues?',
+    answer: 'Individual plans are for single users only and sharing your account is against our terms of service. For team use, please check our team plans which allow multiple users to access the tools legally.',
+  },
+  {
+    question: 'What if a tool doesn\'t work as expected?',
+    answer: 'We thoroughly test all tools before offering them, but if you encounter any issues, our support team is available 24/7 to help. Simply contact us through your dashboard or via email, and we\'ll resolve the issue as quickly as possible.',
+  },
+  {
+    question: 'How often are new tools added to RANKBLAZE?',
+    answer: 'We regularly add new tools and services to our platform based on user demand and emerging trends. All subscribers get access to newly added tools that are included in their subscription tier at no additional cost.',
+  },
+  {
+    question: 'What is your refund policy?',
+    answer: 'If you\'re not satisfied with our service, you can request a refund within 7 days of your purchase. Refunds are processed within 5-7 working days and credited back to your original payment method. For more details, please see our Refund Policy page.',
+  },
 ];
 
 const FAQ = () => {
