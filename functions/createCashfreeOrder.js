@@ -122,7 +122,7 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
     console.log('Cashfree order created successfully:', response);
 
     // Save order to Firestore
-    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set({
+    const firestoreData = {
       order_id: response.order_id,
       payment_session_id: response.payment_session_id,
       amount: response.order_amount,
@@ -134,7 +134,11 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
       status: 'created',
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    
+    console.log('Saving order to Firestore with data:', firestoreData);
+    
+    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set(firestoreData);
     
     // Also save to Realtime Database (for backward compatibility)
     await admin.database().ref(`orders/${response.order_id}`).set({
@@ -202,7 +206,7 @@ app.post('/createCashfreeOrder', async (req, res) => {
     console.log('Cashfree order created successfully via HTTP:', response);
 
     // Save order to Firestore
-    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set({
+    const firestoreHttpData = {
       order_id: response.order_id,
       payment_session_id: response.payment_session_id,
       amount: response.order_amount,
@@ -214,7 +218,11 @@ app.post('/createCashfreeOrder', async (req, res) => {
       status: 'created',
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       updated_at: admin.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    
+    console.log('Saving HTTP order to Firestore with data:', firestoreHttpData);
+    
+    await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set(firestoreHttpData);
     
     // Also save to Realtime Database (for backward compatibility)
     await admin.database().ref(`orders/${response.order_id}`).set({
