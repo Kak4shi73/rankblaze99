@@ -80,9 +80,9 @@ const Footer = () => {
               <li className="flex">
                 <MapPin className="h-5 w-5 text-amber-400 mr-3 shrink-0 mt-1" />
                 <span className="text-indigo-200">
-                  New Delhi<br />
-                  Indraprastha Extension<br />
-                  India
+                  Sarai Khwaja<br />
+                  Faridabad, Haryana<br />
+                  Pincode: 121003
                 </span>
               </li>
               <li className="flex items-center">
