@@ -167,6 +167,108 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
   }
 });
 
+// Add direct HTTP endpoint for createCashfreeOrder with CORS
+exports.createCashfreeOrderHttp = functions.https.onRequest((req, res) => {
+  // Set CORS headers for all responses
+  res.set('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.set('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle OPTIONS requests (preflight)
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+  
+  // For POST requests, handle normally
+  if (req.method === 'POST') {
+    try {
+      // Initialize Cashfree
+      initializeCashfree();
+      
+      const { orderId, amount, customerName, customerPhone, customerEmail, notes = {} } = req.body;
+
+      // Validate amount (required and positive number)
+      if (!amount || isNaN(amount) || amount <= 0) {
+        return res.status(400).send({ error: 'Amount must be a positive number' });
+      }
+
+      // Generate a unique order ID if not provided
+      const order_id = orderId || `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+      // Create the order request
+      const orderRequest = {
+        order_id,
+        order_amount: amount,
+        order_currency: 'INR',
+        order_note: JSON.stringify(notes),
+        customer_details: {
+          customer_id: `cust_${customerPhone || Date.now()}`,
+          customer_name: customerName || 'Guest User',
+          customer_email: customerEmail || 'guest@example.com',
+          customer_phone: customerPhone || '9999999999',
+        },
+      };
+
+      console.log('Creating Cashfree order via HTTP with request:', orderRequest);
+
+      // Create the order with Cashfree
+      Cashfree.PG.orders.create(orderRequest)
+        .then(async (response) => {
+          console.log('Cashfree order created successfully via HTTP:', response);
+
+          // Save order to Firestore
+          const firestoreHttpData = {
+            order_id: response.order_id,
+            payment_session_id: response.payment_session_id,
+            amount: response.order_amount,
+            currency: response.order_currency,
+            customer_name: orderRequest.customer_details.customer_name,
+            customer_email: orderRequest.customer_details.customer_email,
+            customer_phone: orderRequest.customer_details.customer_phone,
+            notes: notes,
+            status: 'created',
+            created_at: admin.firestore.FieldValue.serverTimestamp(),
+            updated_at: admin.firestore.FieldValue.serverTimestamp()
+          };
+          
+          console.log('Saving HTTP order to Firestore with data:', firestoreHttpData);
+          
+          await admin.firestore().collection(ORDERS_COLLECTION).doc(response.order_id).set(firestoreHttpData);
+          
+          // Also save to Realtime Database (for backward compatibility)
+          await admin.database().ref(`orders/${response.order_id}`).set({
+            userId: notes.userId || 'anonymous',
+            amount: response.order_amount,
+            status: 'created',
+            paymentMethod: 'cashfree',
+            orderId: response.order_id,
+            paymentSessionId: response.payment_session_id,
+            createdAt: new Date().toISOString(),
+          });
+          
+          res.status(200).send(response);
+        })
+        .catch(error => {
+          console.error('Error creating Cashfree order:', error);
+          res.status(500).send({ 
+            error: error.message || 'Failed to create Cashfree order'
+          });
+        });
+    } catch (error) {
+      console.error('Error creating Cashfree order:', error);
+      res.status(500).send({ 
+        error: error.message || 'Failed to create Cashfree order'
+      });
+    }
+    return;
+  }
+  
+  // For any other method, return 405 Method Not Allowed
+  res.status(405).send('Method Not Allowed');
+});
+
 /**
  * HTTP endpoint to create a Cashfree order
  */
