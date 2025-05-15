@@ -61,16 +61,6 @@ const HeroSection = () => {
               />
               <p className="text-sm font-montserrat text-cream-200">Trusted by 10,000+ developers</p>
             </div>
-            {/* Premium Support temporarily hidden 
-            <div className="text-center mb-4 opacity-75 transition-opacity hover:opacity-100">
-              <img 
-                src="https://images.pexels.com/photos/3861969/pexels-photo-3861969.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1" 
-                alt="24/7 Support" 
-                className="h-12 w-12 object-cover rounded-full mx-auto mb-3 border-2 border-royal-400/30" 
-              />
-              <p className="text-sm font-montserrat text-cream-200">24/7 Premium Support</p>
-            </div>
-            */}
           </div>
         </div>
       </div>

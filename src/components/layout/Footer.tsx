@@ -59,11 +59,6 @@ const Footer = () => {
           <div>
             <h3 className="text-lg font-bold text-white mb-6">Help & Support</h3>
             <ul className="space-y-3">
-              {/* Support Center temporarily hidden - May 2024
-              <li>
-                <a href="/support" className="text-indigo-200 hover:text-amber-400 transition-colors">Support Center</a>
-              </li>
-              */}
               <li>
                 <a href="/terms" className="text-indigo-200 hover:text-amber-400 transition-colors">Terms & Conditions</a>
               </li>
