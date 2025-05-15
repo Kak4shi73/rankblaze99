@@ -11,6 +11,12 @@
     }
   ],
   "rewrites": [
+    { "source": "/terms", "destination": "/index.html" },
+    { "source": "/policy", "destination": "/index.html" },
+    { "source": "/privacy", "destination": "/index.html" },
+    { "source": "/refund", "destination": "/index.html" },
+    { "source": "/about", "destination": "/index.html" },
+    { "source": "/tools", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "github": {
