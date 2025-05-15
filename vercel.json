@@ -11,20 +11,13 @@
     }
   ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/" }
   ],
+  "cleanUrls": true,
   "trailingSlash": false,
   "github": {
     "silent": false,
     "autoAlias": true
-  },
-  "buildCommand": "npm run build",
-  "cleanUrls": true,
-  "public": true,
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
   },
   "headers": [
     {
@@ -41,10 +34,6 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
         }
       ]
     },
