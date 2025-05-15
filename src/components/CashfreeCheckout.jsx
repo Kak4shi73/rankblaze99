@@ -4,11 +4,16 @@ import { useAuth } from '../contexts/AuthContext';
 
 const CashfreeCheckout = ({ cart, totalAmount }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [error, setError] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleCheckout = async () => {
+    // Prevent duplicate order creation
+    if (isPlacingOrder) return;
+    
+    setIsPlacingOrder(true);
     setIsLoading(true);
     setError(null);
 
@@ -100,6 +105,8 @@ const CashfreeCheckout = ({ cart, totalAmount }) => {
         } catch (err) {
           console.error('Error verifying payment:', err);
           navigate('/dashboard');
+        } finally {
+          setIsPlacingOrder(false);
         }
       };
 
@@ -115,11 +122,13 @@ const CashfreeCheckout = ({ cart, totalAmount }) => {
               orderId: order_id
             } 
           });
+          setIsPlacingOrder(false);
         },
       });
     } catch (err) {
       setError(err.message || 'An error occurred during checkout');
       console.error('Checkout error:', err);
+      setIsPlacingOrder(false);
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +138,7 @@ const CashfreeCheckout = ({ cart, totalAmount }) => {
     <div className="cashfree-checkout">
       <button
         onClick={handleCheckout}
-        disabled={isLoading || !cart || cart.length === 0}
+        disabled={isLoading || isPlacingOrder || !cart || cart.length === 0}
         className={`checkout-button ${isLoading ? 'loading' : ''}`}
       >
         {isLoading ? 'Processing...' : 'Proceed to Pay'}
