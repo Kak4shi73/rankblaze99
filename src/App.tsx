@@ -42,10 +42,15 @@ const RedirectHandler = () => {
     // Get the query parameters
     const query = new URLSearchParams(location.search);
     const redirectPath = query.get('redirect');
+    const pathParam = query.get('path');
     
     // If there's a redirect path, navigate to it
     if (redirectPath) {
       navigate(redirectPath, { replace: true });
+    }
+    // If there's a path parameter (from 404.html), navigate to it
+    else if (pathParam) {
+      navigate(pathParam, { replace: true });
     }
   }, [navigate, location]);
   

@@ -1,39 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Page Not Found - RANKBLAZE</title>
-  <meta name="description" content="The page you're looking for doesn't exist.">
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Redirect script for SPA routes -->
-  <script>
-    // List of valid routes that should be handled by the SPA
-    const routes = [
-      '/terms',
-      '/privacy',
-      '/refund',
-      '/about',
-      '/tools',
-      '/reviews',
-      '/cart',
-      '/login',
-      '/signup'
-    ];
-    
-    // Get the current path
-    const path = window.location.pathname;
-    
-    // Check if this is a known route that should be handled by the SPA
-    if (routes.includes(path)) {
-      // Redirect to the root with the current path in the URL
-      window.location.replace('/?redirect=' + path);
-    }
-  </script>
+<!DOCTYPE html><html lang="en"><head>  <meta charset="UTF-8">  <meta name="viewport" content="width=device-width, initial-scale=1.0">  <title>Page Not Found - RANKBLAZE</title>  <meta name="description" content="The page you're looking for doesn't exist.">  <link rel="icon" type="image/svg+xml" href="/vite.svg" />  <link rel="preconnect" href="https://fonts.googleapis.com">  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">    <!-- Redirect script for SPA routes -->  <script>    // Preserve the current path and redirect to the root with it as a parameter    const currentPath = window.location.pathname;    window.location.replace('/?path=' + currentPath + window.location.search + window.location.hash);  </script>
   
   <style>
     body {
