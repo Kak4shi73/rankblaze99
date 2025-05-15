@@ -143,10 +143,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       const newCartItems = [...cartItems, item];
       setCartItems(newCartItems);
       
-      // Create a pending order if user is logged in
+      // Don't create an order on cart add - only create when checking out
+      // This prevents multiple orders from being created
+      /* 
       if (user) {
         await createCashfreeOrder(newCartItems);
       }
+      */
     }
   };
 
@@ -154,10 +157,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     const newItems = cartItems.filter((item) => item.id !== id);
     setCartItems(newItems);
     
+    // Don't create an order when removing items either
+    /*
     // If there are still items in the cart, create a new order
     if (newItems.length > 0 && user) {
       createCashfreeOrder(newItems);
     }
+    */
   };
 
   const clearCart = () => {
