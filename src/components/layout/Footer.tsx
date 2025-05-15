@@ -1,4 +1,5 @@
 import { Facebook, Twitter, Instagram, Github, Linkedin, Mail, MapPin, Phone } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Logo from '../ui/Logo';
 
 const Footer = () => {
@@ -42,25 +43,25 @@ const Footer = () => {
             <h3 className="text-lg font-bold text-white mb-6">Quick Links</h3>
             <ul className="space-y-3">
               <li>
-                <a href="/" className="text-indigo-200 hover:text-amber-400 transition-colors">Home</a>
+                <Link to="/" className="text-indigo-200 hover:text-amber-400 transition-colors">Home</Link>
               </li>
               <li>
-                <a href="/tools" className="text-indigo-200 hover:text-amber-400 transition-colors">Tools</a>
+                <Link to="/tools" className="text-indigo-200 hover:text-amber-400 transition-colors">Tools</Link>
               </li>
               <li>
-                <a href="/about" className="text-indigo-200 hover:text-amber-400 transition-colors">About Us</a>
+                <Link to="/about" className="text-indigo-200 hover:text-amber-400 transition-colors">About Us</Link>
               </li>
               <li>
-                <a href="/blog" className="text-indigo-200 hover:text-amber-400 transition-colors">Blog</a>
+                <Link to="/blog" className="text-indigo-200 hover:text-amber-400 transition-colors">Blog</Link>
               </li>
               <li>
-                <a href="/terms" className="text-indigo-200 hover:text-amber-400 transition-colors">Terms & Conditions</a>
+                <Link to="/terms" className="text-indigo-200 hover:text-amber-400 transition-colors">Terms & Conditions</Link>
               </li>
               <li>
-                <a href="/privacy" className="text-indigo-200 hover:text-amber-400 transition-colors">Privacy Policy</a>
+                <Link to="/privacy" className="text-indigo-200 hover:text-amber-400 transition-colors">Privacy Policy</Link>
               </li>
               <li>
-                <a href="/refund" className="text-indigo-200 hover:text-amber-400 transition-colors">Refund Policy</a>
+                <Link to="/refund" className="text-indigo-200 hover:text-amber-400 transition-colors">Refund Policy</Link>
               </li>
             </ul>
           </div>
@@ -112,19 +113,19 @@ const Footer = () => {
           <div className="mt-4 md:mt-0">
             <ul className="flex space-x-6">
               <li>
-                <a href="/terms" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <Link to="/terms" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Terms
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/privacy" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <Link to="/privacy" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Privacy
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/cookies" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <Link to="/cookies" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Cookies
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
