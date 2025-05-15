@@ -46,11 +46,15 @@ const RedirectHandler = () => {
     
     // If there's a redirect path, navigate to it
     if (redirectPath) {
-      navigate(redirectPath, { replace: true });
+      // Remove trailing slash if present
+      const cleanPath = redirectPath.endsWith('/') ? redirectPath.slice(0, -1) : redirectPath;
+      navigate(cleanPath, { replace: true });
     }
     // If there's a path parameter (from 404.html), navigate to it
     else if (pathParam) {
-      navigate(pathParam, { replace: true });
+      // Remove trailing slash if present
+      const cleanPath = pathParam.endsWith('/') ? pathParam.slice(0, -1) : pathParam;
+      navigate(cleanPath, { replace: true });
     }
   }, [navigate, location]);
   
