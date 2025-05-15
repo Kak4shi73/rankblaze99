@@ -20,8 +20,21 @@ app.use(express.json());
 // ✅ Step 2: Define the route under this CORS-applied app
 app.post("/createCashfreeOrder", async (req, res) => {
   try {
+    // validate payload
     const { amount, email, phone, name } = req.body;
-    const orderId = "order_" + Date.now();
+    
+    console.log("Order payload:", {
+      amount,
+      email,
+      phone,
+      name,
+    });
+    
+    if (!amount || !email || !phone || !name) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    const orderId = "ordr_" + Date.now();
 
     const response = await Cashfree.PG.orders.create({
       order_id: orderId,
@@ -48,6 +61,10 @@ app.post("/createCashfreeOrder", async (req, res) => {
 // Add test CORS route for debugging
 app.get("/testCors", (req, res) => {
   res.json({ success: true, message: "CORS is working!" });
+});
+
+app.get("/test-cors", (req, res) => {
+  res.status(200).json({ message: "CORS is working properly ✅" });
 });
 
 // ✅ Step 3: Export it correctly
