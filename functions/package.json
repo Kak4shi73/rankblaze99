@@ -12,7 +12,7 @@
   "engines": {
     "node": "18"
   },
-  "main": "lib/index.js",
+  "main": "index.js",
   "dependencies": {
     "cashfree-pg-sdk-nodejs": "github:cashfree/cashfree-pg-sdk-nodejs",
     "cors": "^2.8.5",
