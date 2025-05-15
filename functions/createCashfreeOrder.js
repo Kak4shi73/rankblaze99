@@ -25,41 +25,19 @@ app.use(
 
 app.use(express.json());
 
-// Get the Cashfree credentials from Firebase config
-// In local development, you can use environment variables as fallback
-const getConfig = () => {
-  let appId, secretKey;
-  
-  try {
-    appId = functions.config().cashfree?.app_id;
-    secretKey = functions.config().cashfree?.secret_key;
-  } catch (error) {
-    console.log('Error reading Firebase config, using fallback values:', error);
-  }
-  
-  return {
-    env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
-    clientId: appId || process.env.CASHFREE_APP_ID || '9721923531a775ba3e2dcb8259291279',
-    clientSecret: secretKey || process.env.CASHFREE_SECRET_KEY || 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e',
-  };
-};
+// Note: We're now using a more robust Cashfree initialization in index.js that handles SDK structure differences
+// The initialization checks whether Cashfree.PG exists or falls back to direct Cashfree.initialize
+// See index.js for the full implementation
 
-// Initialize Cashfree SDK
-const initializeCashfree = () => {
-  const config = getConfig();
-  console.log('Initializing Cashfree with config:', {
-    env: config.env,
-    clientId: config.clientId,
-    clientSecret: '***' // Hiding secret key in logs
-  });
-  
-  try {
-    Cashfree.PG.initialize(config);
-    return Cashfree;
-  } catch (error) {
-    console.error('Error initializing Cashfree:', error);
-    throw error;
-  }
+// Helper functions to work with different Cashfree SDK structures
+// These functions will be initialized when the module is imported into index.js
+let createCashfreeOrder;
+let fetchCashfreePayments;
+
+// These will be set when the index.js module imports this module
+const initHelpers = (helpers) => {
+  createCashfreeOrder = helpers.createOrder;
+  fetchCashfreePayments = helpers.fetchPayments;
 };
 
 // Update the Firestore collection name for saving orders
@@ -79,8 +57,7 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Initialize Cashfree
-    initializeCashfree();
+    // Note: We removed the initializeCashfree() call here as it's now initialized at the top level in index.js
     
     const { amount, currency = 'INR', customerName, customerPhone, customerEmail, notes = {} } = data;
 
@@ -117,8 +94,8 @@ exports.createCashfreeOrder = functions.https.onCall(async (data, context) => {
 
     console.log('Creating Cashfree order with request:', orderRequest);
 
-    // Create the order with Cashfree
-    const response = await Cashfree.PG.orders.create(orderRequest);
+    // Create the order with Cashfree using the helper function
+    const response = await createCashfreeOrder(orderRequest);
     console.log('Cashfree order created successfully:', response);
 
     // Save order to Firestore
@@ -184,8 +161,7 @@ exports.createCashfreeOrderHttp = functions.https.onRequest((req, res) => {
   // For POST requests, handle normally
   if (req.method === 'POST') {
     try {
-      // Initialize Cashfree
-      initializeCashfree();
+      // Note: We removed the initializeCashfree() call here as it's now initialized at the top level in index.js
       
       const { orderId, amount, customerName, customerPhone, customerEmail, notes = {} } = req.body;
 
@@ -213,8 +189,8 @@ exports.createCashfreeOrderHttp = functions.https.onRequest((req, res) => {
 
       console.log('Creating Cashfree order via HTTP with request:', orderRequest);
 
-      // Create the order with Cashfree
-      Cashfree.PG.orders.create(orderRequest)
+      // Create the order with Cashfree using the helper function
+      createCashfreeOrder(orderRequest)
         .then(async (response) => {
           console.log('Cashfree order created successfully via HTTP:', response);
 
@@ -274,8 +250,7 @@ exports.createCashfreeOrderHttp = functions.https.onRequest((req, res) => {
  */
 app.post('/createCashfreeOrder', async (req, res) => {
   try {
-    // Initialize Cashfree
-    initializeCashfree();
+    // Note: We removed the initializeCashfree() call here as it's now initialized at the top level in index.js
     
     const { orderId, amount, customerName, customerPhone, customerEmail, notes = {} } = req.body;
 
@@ -303,8 +278,8 @@ app.post('/createCashfreeOrder', async (req, res) => {
 
     console.log('Creating Cashfree order via HTTP with request:', orderRequest);
 
-    // Create the order with Cashfree
-    const response = await Cashfree.PG.orders.create(orderRequest);
+    // Create the order with Cashfree using the helper function
+    const response = await createCashfreeOrder(orderRequest);
     console.log('Cashfree order created successfully via HTTP:', response);
 
     // Save order to Firestore
@@ -365,8 +340,7 @@ exports.verifyCashfreePayment = functions.https.onCall(async (data, context) => 
   }
 
   try {
-    // Initialize Cashfree
-    initializeCashfree();
+    // Note: We removed the initializeCashfree() call here as it's now initialized at the top level in index.js
     
     const { orderId, orderAmount } = data;
 
@@ -378,8 +352,8 @@ exports.verifyCashfreePayment = functions.https.onCall(async (data, context) => 
       );
     }
 
-    // Verify payment
-    const response = await Cashfree.PG.orders.fetchPayments(orderId);
+    // Verify payment using the helper function
+    const response = await fetchCashfreePayments(orderId);
     console.log('Payment verification response:', response);
 
     // Check if payment is successful
@@ -420,8 +394,7 @@ exports.verifyCashfreePayment = functions.https.onCall(async (data, context) => 
  */
 app.post('/verifyCashfreePayment', async (req, res) => {
   try {
-    // Initialize Cashfree
-    initializeCashfree();
+    // Note: We removed the initializeCashfree() call here as it's now initialized at the top level in index.js
     
     const { orderId, orderAmount } = req.body;
 
@@ -430,8 +403,8 @@ app.post('/verifyCashfreePayment', async (req, res) => {
       return res.status(400).send({ error: 'Missing order ID' });
     }
 
-    // Verify payment
-    const response = await Cashfree.PG.orders.fetchPayments(orderId);
+    // Verify payment using the helper function
+    const response = await fetchCashfreePayments(orderId);
     console.log('Payment verification response via HTTP:', response);
 
     // Check if payment is successful
@@ -525,4 +498,7 @@ app.options('*', (req, res) => {
 });
 
 // Export the Express app as a Firebase Function
-exports.api = functions.https.onRequest(app); 
+exports.api = functions.https.onRequest(app);
+
+// Export the initHelpers function
+exports.initHelpers = initHelpers; 

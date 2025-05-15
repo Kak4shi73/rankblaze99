@@ -9,8 +9,70 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+// Initialize Cashfree SDK at the top level with correct structure
+// The proper initialization will depend on the specific Cashfree SDK version
+let cashfreeVersion = 'unknown';
+try {
+  // Try different initialization methods based on SDK structure
+  if (Cashfree.PG) {
+    Cashfree.PG.initialize({
+      env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
+      clientId: '9721923531a775ba3e2dcb8259291279',
+      clientSecret: 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e'
+    });
+    cashfreeVersion = 'PG';
+    console.log("Cashfree initialized using PG.initialize");
+  } else if (typeof Cashfree.initialize === 'function') {
+    Cashfree.initialize({
+      env: process.env.NODE_ENV === 'production' ? 'PROD' : 'SANDBOX',
+      clientId: '9721923531a775ba3e2dcb8259291279',
+      clientSecret: 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e'
+    });
+    cashfreeVersion = 'direct';
+    console.log("Cashfree initialized using direct initialize");
+  } else {
+    console.error("Unable to initialize Cashfree - SDK structure not recognized");
+  }
+} catch (error) {
+  console.error("Error initializing Cashfree:", error);
+}
+
+// Helper function to create orders with Cashfree that works with different SDK versions
+const createCashfreeOrder = async (orderData) => {
+  if (cashfreeVersion === 'PG' && Cashfree.PG && Cashfree.PG.orders) {
+    return Cashfree.PG.orders.create(orderData);
+  } else if (cashfreeVersion === 'direct' && Cashfree.orders) {
+    return Cashfree.orders.create(orderData);
+  } else {
+    throw new Error(`Unable to create order - Cashfree SDK version ${cashfreeVersion} not properly initialized`);
+  }
+};
+
+// Helper function to fetch payments that works with different SDK versions
+const fetchCashfreePayments = async (orderId) => {
+  if (cashfreeVersion === 'PG' && Cashfree.PG && Cashfree.PG.orders) {
+    return Cashfree.PG.orders.fetchPayments(orderId);
+  } else if (cashfreeVersion === 'direct' && Cashfree.orders) {
+    return Cashfree.orders.fetchPayments(orderId);
+  } else {
+    throw new Error(`Unable to fetch payments - Cashfree SDK version ${cashfreeVersion} not properly initialized`);
+  }
+};
+
+// Create the helper functions object
+const cashfreeHelpers = {
+  createOrder: createCashfreeOrder,
+  fetchPayments: fetchCashfreePayments
+};
+
 // Import functions from createCashfreeOrder.js
 const cashfreeModule = require('./createCashfreeOrder');
+
+// Initialize the helper functions in the createCashfreeOrder module
+if (typeof cashfreeModule.initHelpers === 'function') {
+  cashfreeModule.initHelpers(cashfreeHelpers);
+  console.log("Initialized Cashfree helper functions in createCashfreeOrder module");
+}
 
 const app = express();
 
@@ -45,7 +107,7 @@ app.post("/createCashfreeOrder", async (req, res) => {
     
     const finalOrderId = orderId || "ordr_" + Date.now();
 
-    const response = await Cashfree.PG.orders.create({
+    const orderData = {
       order_id: finalOrderId,
       order_amount: amount,
       order_currency: "INR",
@@ -56,7 +118,10 @@ app.post("/createCashfreeOrder", async (req, res) => {
         customer_phone: customerPhone,
       },
       order_note: notes ? JSON.stringify(notes) : "",
-    });
+    };
+
+    // Use the helper function instead of directly calling Cashfree.PG.orders.create
+    const response = await createCashfreeOrder(orderData);
 
     res.status(200).send({
       payment_session_id: response.payment_session_id,
@@ -122,15 +187,6 @@ app.post("/createCashfreeOrderCustom", async (req, res) => {
     const suffix = cartItems.length > 1 ? `-${cartItems.length}` : '';
     const orderId = `${last4User}-${last2Tool}${suffix}`;
     
-    // Initialize Cashfree
-    const config = {
-      env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
-      clientId: functions.config().cashfree?.app_id || process.env.CASHFREE_APP_ID,
-      clientSecret: functions.config().cashfree?.secret_key || process.env.CASHFREE_SECRET_KEY,
-    };
-    
-    Cashfree.PG.initialize(config);
-
     // Create the order request
     const orderRequest = {
       order_id: orderId,
@@ -146,7 +202,7 @@ app.post("/createCashfreeOrderCustom", async (req, res) => {
     };
 
     // Create the order with Cashfree
-    const response = await Cashfree.PG.orders.create(orderRequest);
+    const response = await createCashfreeOrder(orderRequest);
     console.log('Custom Cashfree order created successfully:', response);
 
     // Save order to Firestore
@@ -191,17 +247,8 @@ app.post("/verifyCashfreePaymentCustom", async (req, res) => {
       return res.status(400).json({ error: "Missing order ID" });
     }
 
-    // Initialize Cashfree
-    const config = {
-      env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
-      clientId: functions.config().cashfree?.app_id || process.env.CASHFREE_APP_ID,
-      clientSecret: functions.config().cashfree?.secret_key || process.env.CASHFREE_SECRET_KEY,
-    };
-    
-    Cashfree.PG.initialize(config);
-    
     // Verify payment
-    const response = await Cashfree.PG.orders.fetchPayments(orderId);
+    const response = await fetchCashfreePayments(orderId);
     console.log('Payment verification response for custom order:', response);
 
     // Check if payment is successful
@@ -495,4 +542,7 @@ app.get("/getUserData", async (req, res) => {
 // Export functions from createCashfreeOrder.js
 exports.createCashfreeOrder = cashfreeModule.createCashfreeOrder;
 exports.verifyCashfreePayment = cashfreeModule.verifyCashfreePayment;
-exports.createCashfreeOrderHttp = cashfreeModule.createCashfreeOrderHttp; 
+exports.createCashfreeOrderHttp = cashfreeModule.createCashfreeOrderHttp;
+
+// Export these helper functions to be used in createCashfreeOrder.js
+exports.cashfreeHelpers = cashfreeHelpers; 
