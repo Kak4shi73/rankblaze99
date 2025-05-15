@@ -9,54 +9,22 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Initialize Cashfree SDK at the top level with correct structure
-// The proper initialization will depend on the specific Cashfree SDK version
-let cashfreeVersion = 'unknown';
-try {
-  // Try different initialization methods based on SDK structure
-  if (Cashfree.PG) {
-    Cashfree.PG.initialize({
-      env: process.env.NODE_ENV === 'production' ? Cashfree.Env.PROD : Cashfree.Env.SANDBOX,
-      clientId: '9721923531a775ba3e2dcb8259291279',
-      clientSecret: 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e'
-    });
-    cashfreeVersion = 'PG';
-    console.log("Cashfree initialized using PG.initialize");
-  } else if (typeof Cashfree.initialize === 'function') {
-    Cashfree.initialize({
-      env: process.env.NODE_ENV === 'production' ? 'PROD' : 'SANDBOX',
-      clientId: '9721923531a775ba3e2dcb8259291279',
-      clientSecret: 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e'
-    });
-    cashfreeVersion = 'direct';
-    console.log("Cashfree initialized using direct initialize");
-  } else {
-    console.error("Unable to initialize Cashfree - SDK structure not recognized");
-  }
-} catch (error) {
-  console.error("Error initializing Cashfree:", error);
-}
+// Initialize Cashfree SDK once at the top level with PROD environment
+Cashfree.PG.initialize({
+  env: Cashfree.Env.PROD,
+  clientId: '9721923531a775ba3e2dcb8259291279',
+  clientSecret: 'cfsk_ma_prod_7b3a016d277614ba6a498a17ccf451c2_f7f4ac4e'
+});
+console.log("Cashfree PG SDK initialized with PROD environment");
 
-// Helper function to create orders with Cashfree that works with different SDK versions
+// Helper function to create orders with Cashfree
 const createCashfreeOrder = async (orderData) => {
-  if (cashfreeVersion === 'PG' && Cashfree.PG && Cashfree.PG.orders) {
-    return Cashfree.PG.orders.create(orderData);
-  } else if (cashfreeVersion === 'direct' && Cashfree.orders) {
-    return Cashfree.orders.create(orderData);
-  } else {
-    throw new Error(`Unable to create order - Cashfree SDK version ${cashfreeVersion} not properly initialized`);
-  }
+  return Cashfree.PG.orders.create(orderData);
 };
 
-// Helper function to fetch payments that works with different SDK versions
+// Helper function to fetch payments from Cashfree
 const fetchCashfreePayments = async (orderId) => {
-  if (cashfreeVersion === 'PG' && Cashfree.PG && Cashfree.PG.orders) {
-    return Cashfree.PG.orders.fetchPayments(orderId);
-  } else if (cashfreeVersion === 'direct' && Cashfree.orders) {
-    return Cashfree.orders.fetchPayments(orderId);
-  } else {
-    throw new Error(`Unable to fetch payments - Cashfree SDK version ${cashfreeVersion} not properly initialized`);
-  }
+  return Cashfree.PG.orders.fetchPayments(orderId);
 };
 
 // Create the helper functions object

@@ -25,9 +25,8 @@ app.use(
 
 app.use(express.json());
 
-// Note: We're now using a more robust Cashfree initialization in index.js that handles SDK structure differences
-// The initialization checks whether Cashfree.PG exists or falls back to direct Cashfree.initialize
-// See index.js for the full implementation
+// Note: Cashfree SDK is initialized once at the top level in index.js
+// DO NOT re-initialize it here to avoid "Cannot read properties of undefined (reading 'orders')" error
 
 // Helper functions to work with different Cashfree SDK structures
 // These functions will be initialized when the module is imported into index.js
