@@ -1,2 +1,0 @@
-FORCE VERCEL REBUILD - May 15, 2024 - Timestamp: 12:50pm
-Removing Support Center references from website 
