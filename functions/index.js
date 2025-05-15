@@ -5,15 +5,13 @@ const Cashfree = require("cashfree-pg-sdk-nodejs");
 
 const app = express();
 
-// ✅ Step 1: Apply CORS middleware correctly
-app.use(
-  cors({
-    origin: ["https://www.rankblaze.in", "http://localhost:3000"],
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"],
-    credentials: true,
-  })
-);
+// Updated CORS middleware with expanded methods and headers
+app.use(cors({
+  origin: ["https://www.rankblaze.in", "http://localhost:3000"],
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
 app.use(express.json());
 
@@ -67,5 +65,5 @@ app.get("/test-cors", (req, res) => {
   res.status(200).json({ message: "CORS is working properly ✅" });
 });
 
-// ✅ Step 3: Export it correctly
+// Export as API
 exports.api = functions.https.onRequest(app); 

@@ -12,7 +12,7 @@ if (!admin.apps.length) {
 // Express app for HTTP endpoints
 const app = express();
 
-// Remove the previous CORS configuration and add this instead
+// Setup CORS for Express app
 app.use(
   cors({
     origin: ["https://www.rankblaze.in", "https://rankblaze.in", "http://localhost:3000", "http://localhost:5000"],
@@ -370,34 +370,11 @@ app.post('/verifyCashfreePayment', async (req, res) => {
   }
 });
 
-// Handle preflight OPTIONS requests for all routes
-app.options('*', (req, res) => {
-  // Set explicit CORS headers for OPTIONS requests
-  res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-  res.set('Access-Control-Allow-Credentials', 'true');
-  res.set('Access-Control-Max-Age', '86400'); // 24 hours
-  res.status(204).send('');
-});
-
-// Export the Express app as a Firebase Function
-exports.api = functions.https.onRequest(app);
-
-// Export additional Cashfree webhooks if needed
-exports.cashfreeWebhook = functions.https.onRequest(async (req, res) => {
+/**
+ * Webhook endpoint for Cashfree notifications
+ */
+app.post('/cashfreeWebhook', async (req, res) => {
   try {
-    // Set CORS headers
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
-    
-    // Handle OPTIONS preflight request
-    if (req.method === 'OPTIONS') {
-      res.status(204).send('');
-      return;
-    }
-    
     // Verify webhook signature to ensure it's from Cashfree
     // Implementation depends on Cashfree webhook documentation
     
@@ -432,4 +409,18 @@ exports.cashfreeWebhook = functions.https.onRequest(async (req, res) => {
     console.error('Error processing Cashfree webhook:', error);
     res.status(500).send({ error: 'Internal server error' });
   }
-}); 
+});
+
+// Handle preflight OPTIONS requests for all routes
+app.options('*', (req, res) => {
+  // Set explicit CORS headers for OPTIONS requests
+  res.set('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+  res.set('Access-Control-Allow-Credentials', 'true');
+  res.set('Access-Control-Max-Age', '86400'); // 24 hours
+  res.status(204).send('');
+});
+
+// Export the Express app as a Firebase Function
+exports.api = functions.https.onRequest(app); 
