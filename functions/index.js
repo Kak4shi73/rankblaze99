@@ -22,36 +22,39 @@ app.use(express.json());
 app.post("/createCashfreeOrder", async (req, res) => {
   try {
     // validate payload
-    const { amount, email, phone, name } = req.body;
+    const { amount, customerEmail, customerPhone, customerName, orderId, notes } = req.body;
     
     console.log("Order payload:", {
       amount,
-      email,
-      phone,
-      name,
+      customerEmail,
+      customerPhone,
+      customerName,
+      orderId,
+      notes
     });
     
-    if (!amount || !email || !phone || !name) {
+    if (!amount || !customerEmail || !customerPhone || !customerName) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     
-    const orderId = "ordr_" + Date.now();
+    const finalOrderId = orderId || "ordr_" + Date.now();
 
     const response = await Cashfree.PG.orders.create({
-      order_id: orderId,
+      order_id: finalOrderId,
       order_amount: amount,
       order_currency: "INR",
       customer_details: {
-        customer_id: "cust_" + phone,
-        customer_email: email,
-        customer_name: name,
-        customer_phone: phone,
+        customer_id: "cust_" + customerPhone,
+        customer_email: customerEmail,
+        customer_name: customerName,
+        customer_phone: customerPhone,
       },
+      order_note: notes ? JSON.stringify(notes) : "",
     });
 
     res.status(200).send({
-      session_id: response.payment_session_id,
-      order_id: orderId,
+      payment_session_id: response.payment_session_id,
+      order_id: finalOrderId,
     });
   } catch (err) {
     console.error("Cashfree error:", err.response?.data || err.message);

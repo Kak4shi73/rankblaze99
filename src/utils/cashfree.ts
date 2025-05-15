@@ -95,10 +95,9 @@ export const createOrderViaHttp = async (options: {
       },
       body: JSON.stringify({
         amount: options.amount,
-        currency: options.currency || 'INR',
-        customerName: options.customerName,
-        customerPhone: options.customerPhone,
-        customerEmail: options.customerEmail,
+        customerName: options.customerName || 'Guest User',
+        customerPhone: options.customerPhone || '9999999999',
+        customerEmail: options.customerEmail || 'guest@example.com',
         notes: options.notes || {}
       })
     });
