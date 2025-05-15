@@ -3,13 +3,16 @@ const express = require("express");
 const cors = require("cors");
 const Cashfree = require("cashfree-pg-sdk-nodejs");
 
+// Import functions from createCashfreeOrder.js
+const cashfreeModule = require('./createCashfreeOrder');
+
 const app = express();
 
 // Updated CORS middleware with expanded methods and headers
 app.use(cors({
-  origin: ["https://www.rankblaze.in", "http://localhost:3000"],
+  origin: ["https://www.rankblaze.in", "https://rankblaze.in", "http://localhost:3000", "http://localhost:5000"],
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   credentials: true,
 }));
 
@@ -66,4 +69,9 @@ app.get("/test-cors", (req, res) => {
 });
 
 // Export as API
-exports.api = functions.https.onRequest(app); 
+exports.api = functions.https.onRequest(app);
+
+// Export functions from createCashfreeOrder.js
+exports.createCashfreeOrder = cashfreeModule.createCashfreeOrder;
+exports.verifyCashfreePayment = cashfreeModule.verifyCashfreePayment;
+exports.createCashfreeOrderHttp = cashfreeModule.createCashfreeOrderHttp; 
