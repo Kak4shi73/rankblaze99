@@ -1,4 +1,4 @@
-import { Users, Award, Shield, Zap, ChevronRight } from 'lucide-react';
+import { Users, Award, Shield, Zap, ChevronRight, PackageOpen, Wallet } from 'lucide-react';
 
 const About = () => {
   return (
@@ -37,37 +37,28 @@ const About = () => {
         </div>
 
         {/* Key Features */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
           <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
             <div className="bg-indigo-600 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Users className="h-6 w-6 text-white" />
+              <PackageOpen className="h-6 w-6 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">5,000+ Users</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">Premium Tools</h3>
             <p className="text-indigo-200">
-              Trusted by thousands of developers and creators worldwide for their daily needs.
+              Access to high-quality developer tools that boost productivity.
             </p>
           </div>
 
           <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
             <div className="bg-purple-600 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Award className="h-6 w-6 text-white" />
+              <Wallet className="h-6 w-6 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Premium Quality</h3>
+            <h3 className="text-xl font-semibold text-white mb-2">Cost Savings</h3>
             <p className="text-indigo-200">
-              Curated selection of high-quality tools and services for professionals.
+              Save up to 90% compared to individual tool subscriptions.
             </p>
           </div>
 
-          <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
-            <div className="bg-amber-600 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
-              <Shield className="h-6 w-6 text-white" />
-            </div>
-            <h3 className="text-xl font-semibold text-white mb-2">Secure & Reliable</h3>
-            <p className="text-indigo-200">
-              Enterprise-grade security and reliability for all our services and tools.
-            </p>
-          </div>
-
+          {/* Support section temporarily hidden 
           <div className="bg-gray-800/30 rounded-xl p-6 border border-gray-700">
             <div className="bg-green-600 w-12 h-12 rounded-lg flex items-center justify-center mb-4">
               <Zap className="h-6 w-6 text-white" />
@@ -77,6 +68,7 @@ const About = () => {
               Round-the-clock support to help you resolve any issues quickly.
             </p>
           </div>
+          */}
         </div>
 
         {/* Story Section */}

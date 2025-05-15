@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Pages
 import Home from './pages/Home';
@@ -80,6 +80,7 @@ function App() {
                     <Route path="/terms" element={<Terms />} />
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/refund" element={<RefundPolicy />} />
+                    <Route path="/support" element={<Navigate to="/" replace />} />
                     <Route path="/reviews" element={<Reviews />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
                     <Route

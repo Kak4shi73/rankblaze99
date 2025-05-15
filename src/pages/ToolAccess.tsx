@@ -421,7 +421,7 @@ const ToolAccess: React.FC = () => {
                 ) : (
                   <div className="text-center p-6 bg-gray-800/70 rounded-lg border border-gray-700">
                     <p className="text-indigo-200 mb-6 text-lg">
-                      No token found for {toolInfo?.name}. Please contact support or check back later.
+                      No token found for {toolInfo?.name}. Please check back later or contact the administrator.
                     </p>
                     
                     <div className="flex flex-col sm:flex-row justify-center gap-4">

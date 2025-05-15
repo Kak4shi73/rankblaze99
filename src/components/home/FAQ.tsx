@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     question: 'What if a tool doesn\'t work as expected?',
-    answer: 'We thoroughly test all tools before offering them, but if you encounter any issues, our support team is available 24/7 to help. Simply contact us through your dashboard or via email, and we\'ll resolve the issue as quickly as possible.',
+    answer: 'We thoroughly test all tools before offering them, but if you encounter any issues, please contact the administrator directly through your dashboard or via email, and they will assist you as quickly as possible.',
   },
   {
     question: 'How often are new tools added to RANKBLAZE?',
@@ -106,10 +106,10 @@ const FAQ = () => {
         <div className="mt-12 text-center">
           <p className="text-indigo-300 mb-4">Still have questions?</p>
           <a 
-            href="/contact" 
+            href="mailto:aryansingh2611@outlook.com" 
             className="text-amber-400 hover:text-amber-300 font-medium transition-colors"
           >
-            Contact our support team
+            Contact us via email
           </a>
         </div>
       </div>

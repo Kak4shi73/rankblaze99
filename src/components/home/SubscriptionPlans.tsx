@@ -11,7 +11,7 @@ const plans = [
     price: 29,
     features: [
       'Access to 5 premium tools',
-      'Basic support',
+      'Email notifications',
       'Monthly updates',
       'Single user license',
     ],
@@ -27,7 +27,7 @@ const plans = [
     price: 79,
     features: [
       'Access to 25 premium tools',
-      'Priority support',
+      'Advanced analytics',
       'Weekly updates',
       'Team license (up to 5 users)',
       'Advanced features',
@@ -45,7 +45,7 @@ const plans = [
     price: 199,
     features: [
       'Access to all premium tools',
-      'Dedicated support',
+      'Premium features',
       'Daily updates',
       'Unlimited users',
       'Custom integrations',
