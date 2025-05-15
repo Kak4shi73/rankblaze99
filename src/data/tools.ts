@@ -107,7 +107,8 @@ export const toolsData: Tool[] = [
     ],
     icon: Pen,
     gradient: 'from-green-500 to-teal-600',
-    category: 'Writing'
+    category: 'Writing',
+    hidden: true
   },
   {
     id: 7,
