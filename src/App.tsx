@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 
 // Pages
 import Home from './pages/Home';
@@ -32,6 +33,25 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
 
+// Helper component to handle redirects from query params
+const RedirectHandler = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  useEffect(() => {
+    // Get the query parameters
+    const query = new URLSearchParams(location.search);
+    const redirectPath = query.get('redirect');
+    
+    // If there's a redirect path, navigate to it
+    if (redirectPath) {
+      navigate(redirectPath, { replace: true });
+    }
+  }, [navigate, location]);
+  
+  return null;
+};
+
 function App() {
   return (
     <ToastProvider>
@@ -40,6 +60,8 @@ function App() {
           <CartProvider>
             {/* Session timeout manager */}
             <SessionManager />
+            {/* Redirect handler for SPA navigation */}
+            <RedirectHandler />
             <MainLayout>
               <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 text-gray-100 flex flex-col">
                 <Navbar />
