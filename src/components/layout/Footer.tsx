@@ -49,16 +49,16 @@ const Footer = () => {
                 <Link to="/tools" className="text-indigo-200 hover:text-amber-400 transition-colors">Tools</Link>
               </li>
               <li>
-                <Link to="/about" className="text-indigo-200 hover:text-amber-400 transition-colors">About Us</Link>
+                <a href="/about" target="_blank" rel="noopener noreferrer" className="text-indigo-200 hover:text-amber-400 transition-colors">About Us</a>
               </li>
               <li>
-                <Link to="/terms" className="text-indigo-200 hover:text-amber-400 transition-colors">Terms & Conditions</Link>
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-indigo-200 hover:text-amber-400 transition-colors">Terms & Conditions</a>
               </li>
               <li>
-                <Link to="/privacy" className="text-indigo-200 hover:text-amber-400 transition-colors">Privacy Policy</Link>
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-indigo-200 hover:text-amber-400 transition-colors">Privacy Policy</a>
               </li>
               <li>
-                <Link to="/refund" className="text-indigo-200 hover:text-amber-400 transition-colors">Refund Policy</Link>
+                <a href="/refund" target="_blank" rel="noopener noreferrer" className="text-indigo-200 hover:text-amber-400 transition-colors">Refund Policy</a>
               </li>
             </ul>
           </div>
@@ -110,19 +110,19 @@ const Footer = () => {
           <div className="mt-4 md:mt-0">
             <ul className="flex space-x-6">
               <li>
-                <Link to="/terms" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Terms
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/privacy" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Privacy
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/cookies" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
+                <a href="/cookies" target="_blank" rel="noopener noreferrer" className="text-indigo-300 hover:text-amber-400 text-sm transition-colors">
                   Cookies
-                </Link>
+                </a>
               </li>
             </ul>
           </div>

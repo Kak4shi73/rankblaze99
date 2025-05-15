@@ -59,14 +59,27 @@ const Navbar = () => {
           <ul className="flex space-x-8">
             {navItems.map((item) => (
               <li key={item.name}>
-                <Link
-                  to={item.path}
-                  className={`text-base font-montserrat transition-colors hover:text-gold-400 ${
-                    location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
-                  }`}
-                >
-                  {item.name}
-                </Link>
+                {item.name === 'About' ? (
+                  <a
+                    href={item.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`text-base font-montserrat transition-colors hover:text-gold-400 ${
+                      location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
+                    }`}
+                  >
+                    {item.name}
+                  </a>
+                ) : (
+                  <Link
+                    to={item.path}
+                    className={`text-base font-montserrat transition-colors hover:text-gold-400 ${
+                      location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
+                    }`}
+                  >
+                    {item.name}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -162,14 +175,27 @@ const Navbar = () => {
             <ul className="space-y-4">
               {navItems.map((item) => (
                 <li key={item.name}>
-                  <Link
-                    to={item.path}
-                    className={`block text-lg font-montserrat transition-colors hover:text-gold-400 ${
-                      location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
-                    }`}
-                  >
-                    {item.name}
-                  </Link>
+                  {item.name === 'About' ? (
+                    <a
+                      href={item.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`block text-lg font-montserrat transition-colors hover:text-gold-400 ${
+                        location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
+                      }`}
+                    >
+                      {item.name}
+                    </a>
+                  ) : (
+                    <Link
+                      to={item.path}
+                      className={`block text-lg font-montserrat transition-colors hover:text-gold-400 ${
+                        location.pathname === item.path ? 'text-gold-400' : 'text-platinum-100'
+                      }`}
+                    >
+                      {item.name}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>
