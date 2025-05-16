@@ -266,7 +266,7 @@ const Cart = () => {
                       <div>
                         <h3 className="text-lg font-semibold text-white">{item.name}</h3>
                         <p className="text-indigo-300 text-sm mt-1">
-                          {item.billingCycle ? `${item.billingCycle} subscription` : 'One-time purchase'}
+                          {item.billingCycle ? `${item.billingCycle} access` : 'One-time purchase'}
                         </p>
                       </div>
                       
@@ -307,7 +307,7 @@ const Cart = () => {
                 <X className="h-16 w-16 text-indigo-400 mx-auto mb-4" />
                 <h2 className="text-xl font-bold text-white mb-2">Your cart is empty</h2>
                 <p className="text-indigo-300 mb-6">
-                  Looks like you haven't added any subscriptions or tools to your cart yet.
+                  Looks like you haven't added any tools to your cart yet.
                 </p>
                 <a
                   href="/tools"

@@ -20,13 +20,13 @@ interface ToolInfoMap {
   default: ToolInfoItem;
 }
 
-interface Subscription {
+interface Access {
   id: string;
   userId: string;
-  status: string;
+  startDate: number;
   endDate: number;
-  tools: Array<string | { id: string; status: string }>;
-  [key: string]: any;
+  status: string;
+  tools: Array<{ id: string; name: string; }>;
 }
 
 // Define tool information for rendering
@@ -98,7 +98,7 @@ const ToolAccess: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [hasAccess, setHasAccess] = useState<boolean>(false);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [access, setAccess] = useState<Access | null>(null);
   const [toolInfo, setToolInfo] = useState<ToolInfoItem | null>(null);
   const [tokenCopied, setTokenCopied] = useState<boolean>(false);
   const [toolToken, setToolToken] = useState<string | null>(null);
@@ -205,22 +205,22 @@ const ToolAccess: React.FC = () => {
 
     // Check if user has access to this tool
     const checkAccess = () => {
-      const subscriptionsRef = ref(db, 'subscriptions');
+      const accessesRef = ref(db, 'subscriptions');
       
-      return onValue(subscriptionsRef, (snapshot) => {
+      return onValue(accessesRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           
-          // Find user subscriptions
-          const userSubscriptions = Object.entries(data)
+          // Find user accesses
+          const userAccesses = Object.entries(data)
             .map(([id, value]: [string, any]) => ({
               id,
               ...value
             }))
             .filter(sub => sub.userId === user.id && sub.status === 'active');
           
-          // Check if any subscription has this tool
-          const hasTool = userSubscriptions.some(sub => {
+          // Check if any access has this tool
+          const hasTool = userAccesses.some(sub => {
             if (!sub.tools) return false;
             
             // Check tools array - tools can be either strings or objects with id/status
@@ -235,7 +235,7 @@ const ToolAccess: React.FC = () => {
           
           if (hasTool) {
             setHasAccess(true);
-            setSubscription(userSubscriptions[0]);
+            setAccess(userAccesses[0]);
             
             // Fetch the tool token
             fetchToolToken();
@@ -313,7 +313,7 @@ const ToolAccess: React.FC = () => {
           <Shield className="h-16 w-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
           <p className="text-indigo-200 mb-6">
-            You don't have an active subscription for this tool.
+            You don't have an active access for this tool.
           </p>
           <div className="flex justify-center space-x-4">
             <button
@@ -455,14 +455,14 @@ const ToolAccess: React.FC = () => {
 
               {/* Subscription Info */}
               <div className="p-6 bg-gray-900 rounded-lg border border-gray-700">
-                <h2 className="text-xl font-semibold text-white mb-4">Subscription Info</h2>
-                {subscription && (
+                <h2 className="text-xl font-semibold text-white mb-4">Access Info</h2>
+                {access && (
                   <div className="space-y-2">
                     <p className="text-indigo-200">
-                      <span className="text-gray-400">Status:</span> {subscription.status}
+                      <span className="text-gray-400">Status:</span> {access.status}
                     </p>
                     <p className="text-indigo-200">
-                      <span className="text-gray-400">Valid until:</span> {new Date(subscription.endDate).toLocaleDateString()}
+                      <span className="text-gray-400">Valid until:</span> {new Date(access.endDate).toLocaleDateString()}
                     </p>
                   </div>
                 )}

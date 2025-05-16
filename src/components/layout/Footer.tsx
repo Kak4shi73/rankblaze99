@@ -13,7 +13,7 @@ const Footer = () => {
               <span className="ml-2 text-xl font-bold text-white">RANKBLAZE</span>
             </div>
             <p className="text-indigo-200 mb-6 max-w-xs">
-              Next-Gen Subscriptions for developers. Access premium tools and services at a fraction of the cost.
+              Access premium tools and services at a fraction of the cost.
             </p>
             <div className="flex space-x-4">
               <a href="#" className="text-gray-400 hover:text-amber-400 transition-colors">

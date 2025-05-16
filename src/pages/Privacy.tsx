@@ -27,7 +27,7 @@ const Privacy = () => {
             <p className="text-indigo-200 mb-4">Your information is used to:</p>
             <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
               <li>Provide and improve our services</li>
-              <li>Process payments and subscriptions</li>
+              <li>Process payments and tool access</li>
               <li>Send important updates and notifications</li>
               <li>Analyze service usage and performance</li>
             </ul>

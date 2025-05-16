@@ -49,7 +49,7 @@ const HeroSection = () => {
           </div>
 
           <p className="font-ibm-plex text-xl md:text-2xl max-w-3xl mx-auto mb-20 leading-relaxed text-cream-100">
-            Next-Gen Subscriptions for the tools you love. Access premium developer tools and services at a fraction of the cost.
+            Access premium developer tools and services at a fraction of the cost.
           </p>
           
           <div className="flex justify-center items-center gap-8 mt-12">

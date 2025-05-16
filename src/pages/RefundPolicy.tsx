@@ -18,7 +18,7 @@ const RefundPolicy = () => {
             <p className="text-indigo-200 mb-4">Refunds are available for:</p>
             <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
               <li>Technical issues preventing service use</li>
-              <li>Incorrect subscription charges</li>
+              <li>Incorrect tool access charges</li>
               <li>Service unavailability</li>
             </ul>
 

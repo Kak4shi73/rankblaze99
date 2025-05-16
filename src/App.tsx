@@ -20,6 +20,7 @@ import AdminLogin from './pages/AdminLogin';
 import UpdateTokens from './pages/UpdateTokens';
 import Reviews from './pages/Reviews';
 import About from './pages/About';
+import PlaceholderTool from './pages/PlaceholderTool';
 // import FAQ from './pages/FAQ';
 
 // Components
@@ -99,6 +100,7 @@ function App() {
                         </AuthGuard>
                       } 
                     />
+                    <Route path="/tool/:toolId" element={<PlaceholderTool />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route 
                       path="/payment" 

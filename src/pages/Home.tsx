@@ -30,7 +30,7 @@ const Home = () => {
             Ready to upgrade your stack?
           </h2>
           <p className="text-lg md:text-xl max-w-3xl mx-auto mb-10 text-indigo-100">
-            Join thousands of developers who are saving time and money with RANKBLAZE subscriptions.
+            Join thousands of developers who are saving time and money with RANKBLAZE tool access.
           </p>
           <a 
             href="/tools" 

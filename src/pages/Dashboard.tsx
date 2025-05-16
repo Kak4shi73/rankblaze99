@@ -5,27 +5,17 @@ import { Settings, CreditCard, Package, User, Mail, LogOut, MessageCircle, Exter
 import { firestore, collections, db } from '../config/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, onValue } from 'firebase/database';
+import { getAuth, signOut } from 'firebase/auth';
 
 // Define types
-interface Subscription {
+interface Access {
   id: string;
+  userId: string;
   status: string;
-  startDate: string;
-  endDate: string;
-  amount: number;
-  plan?: string;
-  createdAt: string;
-  tools?: ToolAccess[];
-  lastPayment?: {
-    amount: number;
-    date: string;
-    method: string;
-  };
-}
-
-interface ToolAccess {
-  id: string;
-  status: string;
+  plan: string;
+  startDate: number;
+  endDate: number;
+  tools: Tool[];
 }
 
 interface Tool {
@@ -46,11 +36,11 @@ const Dashboard = () => {
   const { user, logout, isLoading } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('profile');
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [userTools, setUserTools] = useState<ToolAccess[]>([]);
+  const [accesses, setAccesses] = useState<Access[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const auth = getAuth();
 
   useEffect(() => {
     if (!user) return;
@@ -78,26 +68,27 @@ const Dashboard = () => {
     ];
     setAvailableTools(AVAILABLE_TOOLS);
 
-    // Listen for subscriptions from realtime database
-    const subscriptionsRef = ref(db, 'subscriptions');
-    const unsubscribeSubscriptions = onValue(subscriptionsRef, (snapshot) => {
+    // Listen for accesses from realtime database
+    const accessesRef = ref(db, 'subscriptions');
+    const unsubscribeAccesses = onValue(accessesRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const userSubscriptions = Object.entries(data)
-          .map(([id, value]: [string, any]) => ({
-            id,
-            ...value
-          }))
-          .filter(sub => sub.userId === user.id && sub.status === 'active');
         
-        setSubscriptions(userSubscriptions);
+        // Find user accesses
+        const userAccesses = Object.entries(data)
+          .filter(([_, value]: [string, any]) => value.userId === user.id)
+          .map(([key, value]: [string, any]) => ({
+            id: key,
+            ...value,
+          }));
         
-        // Extract tools from subscription
-        const toolsFromSubs = userSubscriptions.flatMap(sub => sub.tools || []);
-        setUserTools(toolsFromSubs);
+        setAccesses(userAccesses);
+        
+        // Extract tools from access
+        const toolsFromSubs = userAccesses.flatMap(sub => sub.tools || []);
+        setAccesses(userAccesses);
       } else {
-        setSubscriptions([]);
-        setUserTools([]);
+        setAccesses([]);
       }
     });
 
@@ -122,7 +113,7 @@ const Dashboard = () => {
     });
 
     return () => {
-      unsubscribeSubscriptions();
+      unsubscribeAccesses();
       unsubscribePayments();
     };
   }, [user]);
@@ -167,6 +158,15 @@ const Dashboard = () => {
     return null;
   };
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
       <div className="container mx-auto px-6 py-8">
@@ -190,23 +190,13 @@ const Dashboard = () => {
             </button>
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'tools'
+                activeTab === 'access'
                   ? 'border-indigo-500 text-indigo-300'
                   : 'border-transparent text-gray-400 hover:text-indigo-300'
               }`}
-              onClick={() => setActiveTab('tools')}
+              onClick={() => setActiveTab('access')}
             >
-              My Tools
-            </button>
-            <button
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'subscriptions'
-                  ? 'border-indigo-500 text-indigo-300'
-                  : 'border-transparent text-gray-400 hover:text-indigo-300'
-              }`}
-              onClick={() => setActiveTab('subscriptions')}
-            >
-              Subscriptions
+              Tool Access
             </button>
             <button
               className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -253,7 +243,7 @@ const Dashboard = () => {
                   Contact Admin
                 </button>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="w-full flex items-center justify-center py-3 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                 >
                   <LogOut className="h-5 w-5 mr-2" />
@@ -265,104 +255,56 @@ const Dashboard = () => {
         )}
 
         {/* Tools Section */}
-        {activeTab === 'tools' && (
+        {activeTab === 'access' && (
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4">Your Tools</h3>
+            <h3 className="text-xl font-bold text-white mb-4">Your Tool Access</h3>
             
             {isLoadingData ? (
               <div className="flex justify-center py-8">
                 <div className="w-8 h-8 border-t-2 border-b-2 border-indigo-400 rounded-full animate-spin"></div>
               </div>
-            ) : userTools.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {userTools
-                  .filter(tool => tool.status === 'active')
-                  .map((tool) => (
-                    <div key={tool.id} className="border border-gray-700 rounded-lg p-4 bg-gray-850 hover:bg-gray-750 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="text-lg font-medium text-white">{getToolName(tool.id)}</h4>
-                          <p className="text-sm text-gray-400 mt-1">Status: Active</p>
+            ) : accesses.length > 0 ? (
+              <div className="space-y-6">
+                {accesses.map((sub) => (
+                  <div 
+                    key={sub.id} 
+                    className="bg-navy-700/50 border border-royal-500/20 rounded-xl overflow-hidden"
+                  >
+                    <div className="p-6">
+                      <h4 className="text-lg font-medium text-white">{sub.plan || 'Premium Tool Access'}</h4>
+                      <div className="flex flex-wrap gap-2 mt-4 mb-6">
+                        {sub.tools && sub.tools.map((tool) => (
+                          <span 
+                            key={tool.id} 
+                            className="bg-navy-600/50 text-royal-300 text-xs py-1 px-3 rounded-full border border-royal-500/10"
+                          >
+                            {getToolName(tool.id)}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center">
+                          <span className={`h-2 w-2 rounded-full ${sub.status === 'active' ? 'bg-green-500' : 'bg-amber-500'} mr-2`}></span>
+                          <span className="text-royal-200">
+                            {sub.status === 'active' ? 'Active' : 'Inactive'}
+                          </span>
                         </div>
-                        <span className="bg-green-900 text-green-300 text-xs px-2 py-1 rounded-full">
-                          Active
+                        <span className="text-royal-300">
+                          Valid until: {new Date(sub.endDate).toLocaleDateString()}
                         </span>
                       </div>
-                      <button 
-                        onClick={() => accessTool(tool.id)}
-                        className="mt-4 w-full flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Access Tool
-                      </button>
                     </div>
-                  ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-400">You don't have any active tools.</p>
-                <button 
-                  onClick={() => navigate('/tools')}
-                  className="mt-4 inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Browse Tools
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Subscriptions Section */}
-        {activeTab === 'subscriptions' && (
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4">Your Subscriptions</h3>
-            
-            {isLoadingData ? (
-              <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-t-2 border-b-2 border-indigo-400 rounded-full animate-spin"></div>
-              </div>
-            ) : subscriptions.length > 0 ? (
-              <div className="space-y-4">
-                {subscriptions.map((sub) => (
-                  <div key={sub.id} className="border border-gray-700 rounded-lg p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="text-lg font-medium text-white">{sub.plan || 'Premium Subscription'}</h4>
-                        <p className="text-sm text-gray-400 mt-1">Active since: {new Date(sub.startDate || sub.createdAt).toLocaleDateString()}</p>
-                        {sub.endDate && (
-                          <p className="text-sm text-gray-400 mt-1">Valid until: {new Date(sub.endDate).toLocaleDateString()}</p>
-                        )}
-                      </div>
-                      <span className="bg-green-900 text-green-300 text-xs px-2 py-1 rounded-full">
-                        {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
-                      </span>
-                    </div>
-                    
-                    {sub.tools && sub.tools.length > 0 && (
-                      <div className="mt-4">
-                        <h5 className="text-sm font-medium text-gray-300 mb-2">Included Tools:</h5>
-                        <div className="flex flex-wrap gap-2">
-                          {sub.tools
-                            .filter(tool => tool.status === 'active')
-                            .map(tool => (
-                              <span key={tool.id} className="bg-gray-700 text-indigo-300 text-xs px-2 py-1 rounded-md">
-                                {getToolName(tool.id)}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-400">You don't have any active subscriptions.</p>
+                <p className="text-gray-400">You don't have any active tool access.</p>
                 <button 
                   onClick={() => navigate('/tools')}
                   className="mt-4 inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
-                  Browse Plans
+                  Get Tool Access
                 </button>
               </div>
             )}

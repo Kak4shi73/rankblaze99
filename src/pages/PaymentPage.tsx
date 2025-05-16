@@ -255,22 +255,27 @@ const PaymentPage = () => {
       try {
         await set(paymentRef, paymentData);
 
-        // Create subscriptions for each item
+        // Create tool access for each item
         for (const item of cartItems) {
-          const subscriptionId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 10);
-          const subscriptionRef = ref(db, `subscriptions/${subscriptionId}`);
-          const subscriptionData = {
-            userId: user?.id,
+          const accessId = Date.now().toString() + '-' + Math.random().toString(36).substring(2, 10);
+          const accessRef = ref(db, `subscriptions/${accessId}`);
+          const accessData = {
+            userId: user?.uid,
             productId: item.id,
-            productName: item.name,
-            amount: item.price,
-            paymentId,
-            startDate: now,
-            endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            name: item.name,
+            type: 'tool',
+            price: item.price,
             status: 'active',
-            createdAt: now
+            startDate: Date.now(),
+            endDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days from now
+            tools: [{
+              id: item.id.toString(),
+              name: item.name,
+              status: 'active'
+            }]
           };
-          await set(subscriptionRef, subscriptionData);
+          
+          await set(accessRef, accessData);
         }
         
         // Update order status

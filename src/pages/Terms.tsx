@@ -1,3 +1,4 @@
+import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -9,86 +10,82 @@ const Terms = () => {
           <Link to="/" className="text-indigo-400 hover:text-indigo-300 transition-colors mr-4">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-3xl font-bold text-white">Terms & Conditions</h1>
+          <h1 className="text-3xl font-bold text-white">Terms of Service</h1>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-8">
           <div className="prose prose-invert max-w-none">
-            <p className="text-amber-400 mb-6 font-medium">
-              This business is managed by Aryan Singh.
-            </p>
-            
-            <h2 className="text-2xl font-semibold text-white mb-6">1. Acceptance of Terms</h2>
-            <p className="text-indigo-200 mb-6">
-              By accessing and using RANKBLAZE's services, you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.
+            <h2 className="text-2xl font-semibold text-white mb-6">1. Introduction</h2>
+            <p className="text-gray-300 mb-6">
+              These Terms of Service ("Terms") govern your use of the RANKBLAZE website and services.
+              By accessing or using our services, you agree to be bound by these Terms. If you disagree with any part of the terms, please do not use our services.
             </p>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">2. Subscription Services</h2>
-            <p className="text-indigo-200 mb-4">
-              RANKBLAZE provides subscription-based access to developer tools and services. By subscribing to our services, you agree to:
+            <h2 className="text-2xl font-semibold text-white mb-6">2. Tool Access Services</h2>
+            <p className="text-gray-300 mb-6">
+              RANKBLAZE provides access-based tools and services. By accessing our services, you agree to:
             </p>
-            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
-              <li>Pay the subscription fees as per your chosen plan</li>
-              <li>Use the services in accordance with these terms</li>
-              <li>Maintain the confidentiality of your account credentials</li>
-              <li>Accept responsibility for all activities under your account</li>
+            <ul className="list-disc pl-6 mb-6 text-gray-300 space-y-2">
+              <li>Pay the access fees as per your chosen plan</li>
+              <li>Use the provided tools in compliance with all applicable laws and regulations</li>
+              <li>Not share or redistribute access credentials or content</li>
+              <li>Accept that tool availability and features may change</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">3. User Obligations</h2>
-            <p className="text-indigo-200 mb-6">
-              Users must not:
+            <h2 className="text-2xl font-semibold text-white mb-6">3. User Accounts</h2>
+            <p className="text-gray-300 mb-6">
+              To access certain features of RANKBLAZE, you may be required to create a user account. You are responsible for:
             </p>
-            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
-              <li>Share account access with unauthorized users</li>
-              <li>Use the services for illegal purposes</li>
-              <li>Attempt to circumvent security measures</li>
-              <li>Reverse engineer the services</li>
+            <ul className="list-disc pl-6 mb-6 text-gray-300 space-y-2">
+              <li>Maintaining the confidentiality of your account credentials</li>
+              <li>All activities that occur under your account</li>
+              <li>Providing accurate and up-to-date information</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">4. Intellectual Property</h2>
-            <p className="text-indigo-200 mb-6">
-              All content, trademarks, and intellectual property on RANKBLAZE belong to us or our licensors. Users may not copy, modify, or distribute our content without permission.
+            <h2 className="text-2xl font-semibold text-white mb-6">4. Payment Terms</h2>
+            <p className="text-gray-300 mb-6">
+              Our payment terms include:
             </p>
-
-            <h2 className="text-2xl font-semibold text-white mb-6">5. Termination</h2>
-            <p className="text-indigo-200 mb-6">
-              We reserve the right to terminate or suspend accounts that violate these terms. Users may cancel their subscription at any time, subject to our refund policy.
-            </p>
-
-            <h2 className="text-2xl font-semibold text-white mb-6">6. Limitation of Liability</h2>
-            <p className="text-indigo-200 mb-4">
-              By using this website, you acknowledge and agree that:
-            </p>
-            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
-              <li>RANKBLAZE shall not be held liable for any direct, indirect, incidental, or consequential damages arising from the use or misuse of our products.</li>
-              <li>We are not responsible for allergic reactions or health issues arising from product consumption. Customers are advised to review the ingredients list (available upon request) and consult a physician in case of dietary restrictions.</li>
-              <li>We are not liable for delays, damages, or losses once the product has been handed over to the courier company.</li>
-              <li>In case of events beyond our control (natural disasters, strikes, pandemics, etc.), service disruptions may occur for which we shall not be held accountable.</li>
+            <ul className="list-disc pl-6 mb-6 text-gray-300 space-y-2">
+              <li>All payments are processed securely through our payment providers</li>
+              <li>Prices are subject to change with notice</li>
+              <li>Refunds are governed by our Refund Policy</li>
+              <li>Recurring payments will be automatically charged until cancellation</li>
             </ul>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">7. Site Access & User Conduct</h2>
-            <p className="text-indigo-200 mb-4">
-              You agree to access and use the website only for lawful purposes. The following activities are strictly prohibited:
-            </p>
-            <ul className="list-disc list-inside text-indigo-200 mb-6 space-y-2">
-              <li>Attempting to hack, tamper with, or disrupt website functionality</li>
-              <li>Uploading or distributing any malware, viruses, or harmful content</li>
-              <li>Using the website for fraudulent, abusive, or illegal activities</li>
-              <li>Engaging in automated data collection, such as scraping or data mining</li>
-            </ul>
-            <p className="text-indigo-200 mb-6">
-              Any misuse of the website will lead to immediate suspension of access, and may result in legal prosecution under applicable laws.
+            <h2 className="text-2xl font-semibold text-white mb-6">5. Intellectual Property</h2>
+            <p className="text-gray-300 mb-6">
+              All content on RANKBLAZE, including text, graphics, logos, and software, is the property of RANKBLAZE or its content suppliers and is protected by copyright laws.
             </p>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">8. Changes to Terms</h2>
-            <p className="text-indigo-200 mb-6">
-              RANKBLAZE may modify these terms at any time. Continued use of our services after changes constitutes acceptance of the new terms.
+            <h2 className="text-2xl font-semibold text-white mb-6">6. Termination</h2>
+            <p className="text-gray-300 mb-6">
+              We reserve the right to terminate or suspend accounts that violate these terms. Users may cancel their tool access at any time, subject to our refund policy.
             </p>
 
-            <h2 className="text-2xl font-semibold text-white mb-6">9. Contact</h2>
-            <p className="text-indigo-200">
-              For questions about these terms, please contact us at aryansingh2611@outlook.com
+            <h2 className="text-2xl font-semibold text-white mb-6">7. Disclaimer of Warranties</h2>
+            <p className="text-gray-300 mb-6">
+              RANKBLAZE services are provided "as is" and "as available" without warranties of any kind, either express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.
             </p>
+
+            <h2 className="text-2xl font-semibold text-white mb-6">8. Limitation of Liability</h2>
+            <p className="text-gray-300 mb-6">
+              RANKBLAZE shall not be liable for any indirect, incidental, special, or consequential damages resulting from the use or inability to use our services.
+            </p>
+
+            <h2 className="text-2xl font-semibold text-white mb-6">9. Changes to Terms</h2>
+            <p className="text-gray-300 mb-6">
+              RANKBLAZE reserves the right to modify these Terms at any time. We will provide notice of significant changes through our website or via email.
+            </p>
+
+            <h2 className="text-2xl font-semibold text-white mb-6">10. Contact Information</h2>
+            <p className="text-gray-300 mb-6">
+              For questions about these Terms, please contact us at support@rankblaze.in.
+            </p>
+
+            <div className="text-gray-400 mt-10 text-sm">
+              Last updated: May 15, 2023
+            </div>
           </div>
         </div>
       </div>
