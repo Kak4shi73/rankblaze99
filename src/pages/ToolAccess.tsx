@@ -13,6 +13,7 @@ interface ToolInfoItem {
   description: string;
   downloadUrl: string;
   toolUrl: string;
+  useIdPassword?: boolean; // Flag to indicate if this tool uses ID/Password instead of token
 }
 
 interface ToolInfoMap {
@@ -66,6 +67,21 @@ const TOOL_INFO: ToolInfoMap = {
     downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
     toolUrl: 'https://www.semrush.com/'
   },
+  stealth_writer: {
+    name: 'Stealth Writer',
+    icon: '✍️',
+    description: 'Advanced AI content creation tool with plagiarism avoidance',
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://stealthwriter.ai/',
+    useIdPassword: true // This tool uses ID and password instead of token
+  },
+  hix_bypass: {
+    name: 'Hix Bypass',
+    icon: '🔓',
+    description: 'Advanced content protection bypass tool for researchers',
+    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    toolUrl: 'https://hixbypass.com/'
+  },
   // Default for any tool not specifically defined
   default: {
     name: 'Premium Tool',
@@ -83,6 +99,8 @@ const TOOL_ID_MAPPING: Record<string, string[]> = {
   'canva_pro': ['canva_pro', 'canva', 'tool_3', '3'],
   'storyblocks': ['storyblocks', 'tool_4', '4'],
   'semrush': ['semrush', 'tool_5', '5'],
+  'stealth_writer': ['stealth_writer', 'tool_19', '19'],
+  'hix_bypass': ['hix_bypass', 'tool_20', '20'],
   // Add more mappings as needed
 };
 
@@ -101,7 +119,11 @@ const ToolAccess: React.FC = () => {
   const [access, setAccess] = useState<Access | null>(null);
   const [toolInfo, setToolInfo] = useState<ToolInfoItem | null>(null);
   const [tokenCopied, setTokenCopied] = useState<boolean>(false);
+  const [idCopied, setIdCopied] = useState<boolean>(false);
+  const [passwordCopied, setPasswordCopied] = useState<boolean>(false);
   const [toolToken, setToolToken] = useState<string | null>(null);
+  const [toolLoginId, setToolLoginId] = useState<string | null>(null);
+  const [toolPassword, setToolPassword] = useState<string | null>(null);
 
   // Fetch the tool token - defined outside useEffect to be accessible elsewhere
   const fetchToolToken = async (): Promise<void> => {
@@ -110,6 +132,47 @@ const ToolAccess: React.FC = () => {
     setIsLoading(true);
     try {
       console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
+      
+      // Special handling for Stealth Writer which uses ID/Password
+      if (toolId === 'stealth_writer') {
+        // Fetch ID and password from Firebase
+        const idRef = ref(db, `toolCredentials/${toolId}/id`);
+        const passwordRef = ref(db, `toolCredentials/${toolId}/password`);
+        
+        const idSnapshot = await get(idRef);
+        const passwordSnapshot = await get(passwordRef);
+        
+        if (idSnapshot.exists() && passwordSnapshot.exists()) {
+          setToolLoginId(idSnapshot.val());
+          setToolPassword(passwordSnapshot.val());
+          setIsLoading(false);
+          return;
+        } else {
+          // Try fallback to toolTokens structure
+          const credentialsRef = ref(db, `toolTokens/${toolId}`);
+          const credentialsSnapshot = await get(credentialsRef);
+          
+          if (credentialsSnapshot.exists()) {
+            const data = credentialsSnapshot.val();
+            if (typeof data === 'object' && data !== null) {
+              setToolLoginId(data.id || null);
+              setToolPassword(data.password || null);
+            } else if (typeof data === 'string') {
+              // If it's a string, try to parse it as JSON
+              try {
+                const parsed = JSON.parse(data);
+                setToolLoginId(parsed.id || null);
+                setToolPassword(parsed.password || null);
+              } catch (e) {
+                // If parsing fails, use the string as a token
+                setToolToken(data);
+              }
+            }
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
       
       // Get all possible IDs for this tool
       const possibleIds = TOOL_ID_MAPPING[toolId] || [toolId];
@@ -193,6 +256,8 @@ const ToolAccess: React.FC = () => {
     } catch (error) {
       console.error('Error fetching tool token:', error);
       setToolToken(null);
+      setToolLoginId(null);
+      setToolPassword(null);
     }
     setIsLoading(false);
   };
@@ -283,6 +348,24 @@ const ToolAccess: React.FC = () => {
     }
   };
 
+  const copyId = (): void => {
+    if (toolLoginId && hasAccess) {
+      navigator.clipboard.writeText(toolLoginId);
+      setIdCopied(true);
+      setTimeout(() => setIdCopied(false), 2000);
+      showToast('ID copied to clipboard', 'success');
+    }
+  };
+
+  const copyPassword = (): void => {
+    if (toolPassword && hasAccess) {
+      navigator.clipboard.writeText(toolPassword);
+      setPasswordCopied(true);
+      setTimeout(() => setPasswordCopied(false), 2000);
+      showToast('Password copied to clipboard', 'success');
+    }
+  };
+
   const openTool = (): void => {
     if (!hasAccess || !toolId) {
       showToast('Access denied', 'error');
@@ -368,16 +451,98 @@ const ToolAccess: React.FC = () => {
             <div className="space-y-6">
               {/* Main Tool Token Section */}
               <div className="p-8 bg-gradient-to-br from-purple-900 to-indigo-900 rounded-lg border border-purple-700 shadow-lg">
-                <h2 className="text-2xl font-semibold text-white mb-4">Your Access Token</h2>
+                <h2 className="text-2xl font-semibold text-white mb-4">Your Access {toolInfo?.useIdPassword ? 'Credentials' : 'Token'}</h2>
                 <p className="text-indigo-200 mb-6">
-                  Use this token to access {toolInfo?.name}. Copy it and use it to log in.
+                  {toolInfo?.useIdPassword 
+                    ? `Use these credentials to access ${toolInfo?.name}. Copy the ID and password and use them to log in.` 
+                    : `Use this token to access ${toolInfo?.name}. Copy it and use it to log in.`}
                 </p>
                 
                 {isLoading ? (
                   <div className="flex justify-center p-6">
                     <div className="w-10 h-10 border-t-2 border-b-2 border-indigo-400 rounded-full animate-spin"></div>
                   </div>
+                ) : toolInfo?.useIdPassword ? (
+                  // ID and Password display for tools that use credentials
+                  <div className="flex flex-col space-y-5">
+                    {/* ID Field */}
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-300 mb-2">Login ID:</label>
+                      <div className="relative">
+                        <div className="p-5 bg-gray-800 rounded-lg border border-gray-700 font-mono text-md text-amber-400 break-all">
+                          {toolLoginId || 'No ID available'}
+                        </div>
+                        <button
+                          onClick={copyId}
+                          disabled={!toolLoginId}
+                          className="absolute top-3 right-3 p-2 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors disabled:opacity-50"
+                          title="Copy ID"
+                        >
+                          {idCopied ? (
+                            <Check className="h-5 w-5 text-green-400" />
+                          ) : (
+                            <Copy className="h-5 w-5 text-gray-300" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-300 mb-2">Password:</label>
+                      <div className="relative">
+                        <div className="p-5 bg-gray-800 rounded-lg border border-gray-700 font-mono text-md text-amber-400 break-all">
+                          {toolPassword || 'No password available'}
+                        </div>
+                        <button
+                          onClick={copyPassword}
+                          disabled={!toolPassword}
+                          className="absolute top-3 right-3 p-2 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors disabled:opacity-50"
+                          title="Copy password"
+                        >
+                          {passwordCopied ? (
+                            <Check className="h-5 w-5 text-green-400" />
+                          ) : (
+                            <Copy className="h-5 w-5 text-gray-300" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <button
+                        onClick={copyId}
+                        disabled={!toolLoginId}
+                        className="flex-1 flex items-center justify-center px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                      >
+                        <Copy className="h-5 w-5 mr-2" />
+                        Copy ID
+                      </button>
+                      
+                      <button
+                        onClick={copyPassword}
+                        disabled={!toolPassword}
+                        className="flex-1 flex items-center justify-center px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                      >
+                        <Copy className="h-5 w-5 mr-2" />
+                        Copy Password
+                      </button>
+                      
+                      <button
+                        onClick={openTool}
+                        className="flex-1 flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <ExternalLink className="h-5 w-5 mr-2" />
+                        Open {toolInfo?.name}
+                      </button>
+                    </div>
+                    
+                    <p className="text-center text-indigo-200 mt-2">
+                      First copy your ID and password, then click "Open {toolInfo?.name}" and use them to log in.
+                    </p>
+                  </div>
                 ) : toolToken ? (
+                  // Standard token display for other tools
                   <div className="flex flex-col space-y-5">
                     <div className="relative">
                       <div className="p-5 bg-gray-800 rounded-lg border border-gray-700 font-mono text-md text-amber-400 break-all">
@@ -421,7 +586,7 @@ const ToolAccess: React.FC = () => {
                 ) : (
                   <div className="text-center p-6 bg-gray-800/70 rounded-lg border border-gray-700">
                     <p className="text-indigo-200 mb-6 text-lg">
-                      No token found for {toolInfo?.name}. Please check back later or contact the administrator.
+                      No {toolInfo?.useIdPassword ? 'credentials' : 'token'} found for {toolInfo?.name}. Please check back later or contact the administrator.
                     </p>
                     
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -447,7 +612,7 @@ const ToolAccess: React.FC = () => {
                       onClick={() => fetchToolToken()} 
                       className="mt-4 text-indigo-400 underline hover:text-indigo-300"
                     >
-                      Refresh Token
+                      Refresh {toolInfo?.useIdPassword ? 'Credentials' : 'Token'}
                     </button>
                   </div>
                 )}

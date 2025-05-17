@@ -6,9 +6,15 @@ import { db } from '../config/firebase';
 import { useToast } from '../context/ToastContext';
 import { toolsData } from '../data/tools';
 
+interface ToolCredentials {
+  id?: string;
+  password?: string;
+}
+
 const UpdateTokens = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [tokens, setTokens] = useState<{ [key: string]: string }>({});
+  const [credentials, setCredentials] = useState<{ [key: string]: ToolCredentials }>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedTool, setCopiedTool] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -33,21 +39,48 @@ const UpdateTokens = () => {
           if (snapshot.exists()) {
             const tokenData = snapshot.val();
             const processedTokens: {[key: string]: string} = {};
+            const processedCredentials: {[key: string]: ToolCredentials} = {};
             
             // Process each token to extract the value property or use the direct value
             Object.entries(tokenData).forEach(([toolId, tokenValue]) => {
-              if (typeof tokenValue === 'string') {
-                processedTokens[toolId] = tokenValue;
-              } else if (typeof tokenValue === 'object' && tokenValue !== null) {
-                // @ts-ignore
-                if (tokenValue.value) {
+              // Special handling for Stealth Writer which uses ID/password
+              if (toolId === 'stealth_writer' || toolId === 'tool_19') {
+                if (typeof tokenValue === 'object' && tokenValue !== null) {
                   // @ts-ignore
-                  processedTokens[toolId] = tokenValue.value;
+                  processedCredentials[toolId] = {
+                    // @ts-ignore
+                    id: tokenValue.id || '',
+                    // @ts-ignore
+                    password: tokenValue.password || ''
+                  };
+                } else if (typeof tokenValue === 'string') {
+                  try {
+                    // Try to parse as JSON if it's a string
+                    const parsed = JSON.parse(tokenValue as string);
+                    processedCredentials[toolId] = {
+                      id: parsed.id || '',
+                      password: parsed.password || ''
+                    };
+                  } catch (e) {
+                    // If parsing fails, just use as token
+                    processedTokens[toolId] = tokenValue as string;
+                  }
+                }
+              } else {
+                if (typeof tokenValue === 'string') {
+                  processedTokens[toolId] = tokenValue as string;
+                } else if (typeof tokenValue === 'object' && tokenValue !== null) {
+                  // @ts-ignore
+                  if (tokenValue.value) {
+                    // @ts-ignore
+                    processedTokens[toolId] = tokenValue.value;
+                  }
                 }
               }
             });
             
             setTokens(processedTokens);
+            setCredentials(processedCredentials);
           }
           setIsLoading(false);
         }, (error) => {
@@ -79,8 +112,38 @@ const UpdateTokens = () => {
     }));
   };
 
+  const handleCredentialChange = (toolId: string, field: 'id' | 'password', value: string) => {
+    setCredentials(prev => ({
+      ...prev,
+      [toolId]: {
+        ...prev[toolId],
+        [field]: value
+      }
+    }));
+  };
+
   const updateToken = async (toolId: string) => {
     try {
+      // Special handling for Stealth Writer
+      if (toolId === 'stealth_writer' || toolId === 'tool_19') {
+        const creds = credentials[toolId];
+        if (!creds || (!creds.id && !creds.password)) {
+          showToast('Please enter ID and password', 'error');
+          return;
+        }
+
+        const tokenRef = ref(db, `toolTokens/${toolId}`);
+        await set(tokenRef, {
+          id: creds.id || '',
+          password: creds.password || ''
+        });
+        
+        console.log(`Credentials updated for ${toolId}:`, creds);
+        showToast(`Credentials for ${toolId} updated successfully`, 'success');
+        return;
+      }
+
+      // Normal token handling for other tools
       if (!tokens[toolId] || tokens[toolId].trim() === '') {
         showToast('Please enter a token value', 'error');
         return;
@@ -102,32 +165,48 @@ const UpdateTokens = () => {
   const updateAllTokens = async () => {
     try {
       const tokenUpdates: Record<string, string> = {};
-      let hasValidTokens = false;
+      const credentialUpdates: Record<string, ToolCredentials> = {};
+      let hasValidUpdates = false;
 
       // Process tokens and validate
       Object.entries(tokens).forEach(([toolId, token]) => {
-        if (token && token.trim() !== '') {
+        if (toolId !== 'stealth_writer' && toolId !== 'tool_19' && token && token.trim() !== '') {
           tokenUpdates[toolId] = token;
-          hasValidTokens = true;
+          hasValidUpdates = true;
         }
       });
 
-      if (!hasValidTokens) {
-        showToast('No valid tokens to update', 'error');
+      // Process credentials for special tools
+      Object.entries(credentials).forEach(([toolId, creds]) => {
+        if ((creds.id && creds.id.trim() !== '') || (creds.password && creds.password.trim() !== '')) {
+          credentialUpdates[toolId] = creds;
+          hasValidUpdates = true;
+        }
+      });
+
+      if (!hasValidUpdates) {
+        showToast('No valid tokens or credentials to update', 'error');
         return;
       }
 
       console.log('Updating tokens:', tokenUpdates);
+      console.log('Updating credentials:', credentialUpdates);
       
       // Update each token individually with set() to ensure they're stored directly
       for (const [toolId, token] of Object.entries(tokenUpdates)) {
         const tokenRef = ref(db, `toolTokens/${toolId}`);
         await set(tokenRef, token);
       }
+
+      // Update credentials for special tools
+      for (const [toolId, creds] of Object.entries(credentialUpdates)) {
+        const tokenRef = ref(db, `toolTokens/${toolId}`);
+        await set(tokenRef, creds);
+      }
       
-      showToast('All tokens updated successfully', 'success');
+      showToast('All tokens and credentials updated successfully', 'success');
     } catch (error) {
-      console.error('Error updating all tokens:', error);
+      console.error('Error updating tokens:', error);
       showToast('Failed to update tokens', 'error');
     }
   };
@@ -145,6 +224,11 @@ const UpdateTokens = () => {
     tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (typeof tool.id === 'number' && `tool_${tool.id}`.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  // Helper function to determine if a tool uses ID/password
+  const usesIdPassword = (toolId: string) => {
+    return toolId === 'stealth_writer' || toolId === 'tool_19';
+  };
 
   if (isLoading) {
     return (
@@ -202,7 +286,7 @@ const UpdateTokens = () => {
               <thead className="bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tool</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Access Credentials</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -210,6 +294,7 @@ const UpdateTokens = () => {
                 {filteredTools.map((tool) => {
                   // Convert tool.id to string if it's a number
                   const toolId = typeof tool.id === 'number' ? `tool_${tool.id}` : String(tool.id);
+                  const isIdPasswordTool = usesIdPassword(toolId);
                   
                   return (
                     <tr key={toolId}>
@@ -225,13 +310,38 @@ const UpdateTokens = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <textarea
-                          value={tokens[toolId] || ''}
-                          onChange={(e) => handleTokenChange(toolId, e.target.value)}
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          rows={2}
-                          placeholder="Enter token value here"
-                        />
+                        {isIdPasswordTool ? (
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-400 mb-1">Login ID</label>
+                              <input
+                                type="text"
+                                value={credentials[toolId]?.id || ''}
+                                onChange={(e) => handleCredentialChange(toolId, 'id', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Enter login ID"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-400 mb-1">Password</label>
+                              <input
+                                type="text"
+                                value={credentials[toolId]?.password || ''}
+                                onChange={(e) => handleCredentialChange(toolId, 'password', e.target.value)}
+                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                placeholder="Enter password"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <textarea
+                            value={tokens[toolId] || ''}
+                            onChange={(e) => handleTokenChange(toolId, e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            rows={2}
+                            placeholder="Enter token value here"
+                          />
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2">
@@ -242,13 +352,15 @@ const UpdateTokens = () => {
                             Update
                           </button>
                           
-                          <button
-                            onClick={() => copyToken(toolId)}
-                            className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm flex items-center"
-                          >
-                            {copiedTool === toolId ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                            {copiedTool === toolId ? 'Copied' : 'Copy'}
-                          </button>
+                          {!isIdPasswordTool && (
+                            <button
+                              onClick={() => copyToken(toolId)}
+                              className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm flex items-center"
+                            >
+                              {copiedTool === toolId ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                              {copiedTool === toolId ? 'Copied' : 'Copy'}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
