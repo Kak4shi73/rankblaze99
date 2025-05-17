@@ -30,8 +30,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Bot,
     gradient: 'from-violet-500 to-purple-600',
-    category: 'AI',
-    hidden: true
+    category: 'AI'
   },
   {
     id: 2,
@@ -61,8 +60,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Layout,
     gradient: 'from-blue-500 to-indigo-600',
-    category: 'Design',
-    hidden: true
+    category: 'Design'
   },
   {
     id: 4,
@@ -107,8 +105,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Pen,
     gradient: 'from-green-500 to-teal-600',
-    category: 'Writing',
-    hidden: true
+    category: 'Writing'
   },
   {
     id: 7,
@@ -123,8 +120,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Play,
     gradient: 'from-red-500 to-rose-600',
-    category: 'Entertainment',
-    hidden: true
+    category: 'Entertainment'
   },
   {
     id: 8,
@@ -139,8 +135,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Music,
     gradient: 'from-green-500 to-emerald-600',
-    category: 'Entertainment',
-    hidden: true
+    category: 'Entertainment'
   },
   {
     id: 9,
@@ -155,8 +150,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Play,
     gradient: 'from-red-600 to-pink-600',
-    category: 'Entertainment',
-    hidden: true
+    category: 'Entertainment'
   },
   {
     id: 10,
@@ -231,8 +225,7 @@ export const toolsData: Tool[] = [
     ],
     icon: Book,
     gradient: 'from-blue-600 to-indigo-600',
-    category: 'Education',
-    hidden: true
+    category: 'Education'
   },
   {
     id: 15,
