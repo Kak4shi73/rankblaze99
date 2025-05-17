@@ -31,6 +31,43 @@ const ToolCard = ({ tool }: ToolCardProps) => {
     showToast(`${tool.name} added to cart`, 'success');
   };
 
+  // Render Razorpay button for ChatGPT Plus (id: 1) or standard cart button for others
+  const renderActionButton = () => {
+    if (tool.id === 1) {
+      return (
+        <form className="flex-1">
+          <script src="https://checkout.razorpay.com/v1/payment-button.js"
+            data-payment_button_id="pl_QVxRci16PfcNMb" async>
+          </script>
+        </form>
+      );
+    }
+
+    return (
+      <button
+        onClick={handleAddToCart}
+        disabled={isInCart(tool.id)}
+        className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
+          isInCart(tool.id)
+            ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
+            : `bg-gradient-to-r ${tool.gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
+        }`}
+      >
+        {isInCart(tool.id) ? (
+          <>
+            <Check className="h-5 w-5 mr-2" />
+            Added to Cart
+          </>
+        ) : (
+          <>
+            <Plus className="h-5 w-5 mr-2" />
+            Add to Cart
+          </>
+        )}
+      </button>
+    );
+  };
+
   return (
     <>
       <div className="group relative rounded-2xl transition-all duration-500 transform hover:-translate-y-2">
@@ -62,27 +99,7 @@ const ToolCard = ({ tool }: ToolCardProps) => {
                 View Features
               </button>
 
-              <button
-                onClick={handleAddToCart}
-                disabled={isInCart(tool.id)}
-                className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
-                  isInCart(tool.id)
-                    ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
-                    : `bg-gradient-to-r ${tool.gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
-                }`}
-              >
-                {isInCart(tool.id) ? (
-                  <>
-                    <Check className="h-5 w-5 mr-2" />
-                    Added to Cart
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-5 w-5 mr-2" />
-                    Add to Cart
-                  </>
-                )}
-              </button>
+              {renderActionButton()}
             </div>
           </div>
         </div>
