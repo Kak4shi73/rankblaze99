@@ -272,15 +272,33 @@ const Dashboard = () => {
                   >
                     <div className="p-6">
                       <h4 className="text-lg font-medium text-white">{sub.plan || 'Premium Tool Access'}</h4>
-                      <div className="flex flex-wrap gap-2 mt-4 mb-6">
+                      <div className="flex flex-wrap gap-4 mt-4 mb-6">
                         {sub.tools && sub.tools.map((tool) => (
-                          <span 
-                            key={tool.id} 
-                            className="bg-navy-600/50 text-royal-300 text-xs py-1 px-3 rounded-full border border-royal-500/10 hover:bg-navy-500/50 cursor-pointer"
-                            onClick={() => accessTool(tool.id)}
-                          >
-                            {getToolName(tool.id)}
-                          </span>
+                          <div key={tool.id} className="flex flex-col items-center bg-navy-800/40 p-3 rounded-lg border border-royal-500/10">
+                            <div className="text-2xl mb-2">
+                              {tool.id.includes('chatgpt') ? '🤖' : 
+                               tool.id.includes('canva') ? '✏️' : 
+                               tool.id.includes('envato') ? '🎨' : 
+                               tool.id.includes('story') ? '🎬' : 
+                               tool.id.includes('semrush') ? '📈' : 
+                               tool.id.includes('gramm') ? '📝' : 
+                               tool.id.includes('netflix') ? '🎬' : 
+                               tool.id.includes('spotify') ? '🎵' : 
+                               tool.id.includes('youtube') ? '📺' : '⚡'}
+                            </div>
+                            <span 
+                              className="bg-navy-600/50 text-royal-300 text-xs py-1 px-3 rounded-full border border-royal-500/10 hover:bg-navy-500/50 cursor-pointer mb-3 text-center"
+                            >
+                              {getToolName(tool.id)}
+                            </span>
+                            <button 
+                              onClick={() => accessTool(tool.id)}
+                              className="w-full text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center justify-center"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              Access Tool
+                            </button>
+                          </div>
                         ))}
                       </div>
                       <div className="flex justify-between items-center text-sm">
