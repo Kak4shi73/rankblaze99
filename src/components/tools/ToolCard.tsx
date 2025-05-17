@@ -32,21 +32,43 @@ const ToolCard = ({ tool }: ToolCardProps) => {
     showToast(`${tool.name} added to cart`, 'success');
   };
 
-  // Effect to inject Razorpay script for ChatGPT Plus
+  // Get Razorpay payment button ID based on tool ID
+  const getRazorpayButtonId = (toolId: number): string | null => {
+    const buttonIds: Record<number, string> = {
+      1: 'pl_QW2NErdMtUUfqa', // ChatGPT Plus
+      2: 'pl_QW2ktda91DA0p1', // Envato Elements
+      3: 'pl_QW2yxpP0F1fwIb', // Canva Pro
+      4: 'pl_QW30xbYuzS6F1W', // Storyblocks
+      5: 'pl_QW35VHxq04Og6k', // SEMrush
+      6: 'pl_QW37VbzXkt9KcX', // Grammarly
+      7: 'pl_QW39I83HgUpmYX', // Netflix Premium
+      8: 'pl_QW3BXmf2ucsRj6', // Spotify Premium
+      9: 'pl_QW3DHVp6U8BaiU', // YouTube Premium
+      10: 'pl_QW3DHVp6U8BaiU', // Helium10
+    };
+
+    return buttonIds[toolId] || null;
+  };
+
+  // Effect to inject Razorpay script for tools with payment buttons
   useEffect(() => {
-    if (tool.id === 1 && razorpayFormRef.current) {
+    const buttonId = getRazorpayButtonId(tool.id);
+    
+    if (buttonId && razorpayFormRef.current) {
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
       script.async = true;
-      script.setAttribute('data-payment_button_id', 'pl_QW2NErdMtUUfqa');
+      script.setAttribute('data-payment_button_id', buttonId);
       razorpayFormRef.current.innerHTML = '';
       razorpayFormRef.current.appendChild(script);
     }
   }, [tool.id]);
 
-  // Render Razorpay button for ChatGPT Plus (id: 1) or standard cart button for others
+  // Render Razorpay button for tools with payment buttons or standard cart button for others
   const renderActionButton = () => {
-    if (tool.id === 1) {
+    const buttonId = getRazorpayButtonId(tool.id);
+    
+    if (buttonId) {
       return (
         <form ref={razorpayFormRef} className="flex-1"></form>
       );
