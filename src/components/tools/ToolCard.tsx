@@ -38,7 +38,7 @@ const ToolCard = ({ tool }: ToolCardProps) => {
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
       script.async = true;
-      script.setAttribute('data-payment_button_id', 'pl_QVxRci16PfcNMb');
+      script.setAttribute('data-payment_button_id', 'pl_QW2NErdMtUUfqa');
       razorpayFormRef.current.innerHTML = '';
       razorpayFormRef.current.appendChild(script);
     }
