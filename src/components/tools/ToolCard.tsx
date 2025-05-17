@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Check, X, ExternalLink } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
@@ -20,6 +20,7 @@ const ToolCard = ({ tool }: ToolCardProps) => {
   const { showToast } = useToast();
   const [showFeatures, setShowFeatures] = useState(false);
   const Icon = tool.icon;
+  const razorpayFormRef = useRef<HTMLFormElement>(null);
 
   const handleAddToCart = () => {
     addToCart({
@@ -31,15 +32,23 @@ const ToolCard = ({ tool }: ToolCardProps) => {
     showToast(`${tool.name} added to cart`, 'success');
   };
 
+  // Effect to inject Razorpay script for ChatGPT Plus
+  useEffect(() => {
+    if (tool.id === 1 && razorpayFormRef.current) {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
+      script.async = true;
+      script.setAttribute('data-payment_button_id', 'pl_QVxRci16PfcNMb');
+      razorpayFormRef.current.innerHTML = '';
+      razorpayFormRef.current.appendChild(script);
+    }
+  }, [tool.id]);
+
   // Render Razorpay button for ChatGPT Plus (id: 1) or standard cart button for others
   const renderActionButton = () => {
     if (tool.id === 1) {
       return (
-        <form className="flex-1">
-          <script src="https://checkout.razorpay.com/v1/payment-button.js"
-            data-payment_button_id="pl_QVxRci16PfcNMb" async>
-          </script>
-        </form>
+        <form ref={razorpayFormRef} className="flex-1"></form>
       );
     }
 
