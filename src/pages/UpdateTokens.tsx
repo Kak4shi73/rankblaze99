@@ -35,7 +35,7 @@ const UpdateTokens = () => {
         const tokensRef = ref(db, 'toolTokens');
         
         // Set up real-time listener
-        return onValue(tokensRef, (snapshot) => {
+        return onValue(tokensRef, async (snapshot) => {
           if (snapshot.exists()) {
             const tokenData = snapshot.val();
             const processedTokens: {[key: string]: string} = {};
@@ -78,6 +78,24 @@ const UpdateTokens = () => {
                 }
               }
             });
+            
+            // Also check for tool_19 at root level
+            try {
+              const tool19Ref = ref(db, 'tool_19');
+              const tool19Snapshot = await get(tool19Ref);
+              
+              if (tool19Snapshot.exists()) {
+                const data = tool19Snapshot.val();
+                if (typeof data === 'object' && data !== null) {
+                  processedCredentials['tool_19'] = {
+                    id: data.id || '',
+                    password: data.password || ''
+                  };
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching tool_19 from root:', error);
+            }
             
             setTokens(processedTokens);
             setCredentials(processedCredentials);
@@ -132,11 +150,27 @@ const UpdateTokens = () => {
           return;
         }
 
-        const tokenRef = ref(db, `toolTokens/${toolId}`);
-        await set(tokenRef, {
-          id: creds.id || '',
-          password: creds.password || ''
-        });
+        // For tool_19, update directly at the root level
+        if (toolId === 'tool_19') {
+          const tokenRef = ref(db, `toolTokens/tool_19`);
+          await set(tokenRef, {
+            id: creds.id || '',
+            password: creds.password || ''
+          });
+          
+          // Also update the direct path for redundancy
+          const directRef = ref(db, 'tool_19');
+          await set(directRef, {
+            id: creds.id || '',
+            password: creds.password || ''
+          });
+        } else {
+          const tokenRef = ref(db, `toolTokens/${toolId}`);
+          await set(tokenRef, {
+            id: creds.id || '',
+            password: creds.password || ''
+          });
+        }
         
         console.log(`Credentials updated for ${toolId}:`, creds);
         showToast(`Credentials for ${toolId} updated successfully`, 'success');
@@ -200,8 +234,18 @@ const UpdateTokens = () => {
 
       // Update credentials for special tools
       for (const [toolId, creds] of Object.entries(credentialUpdates)) {
-        const tokenRef = ref(db, `toolTokens/${toolId}`);
-        await set(tokenRef, creds);
+        if (toolId === 'tool_19') {
+          // Update in both locations for tool_19
+          const tokenRef = ref(db, `toolTokens/${toolId}`);
+          await set(tokenRef, creds);
+          
+          // Also update direct path
+          const directRef = ref(db, 'tool_19');
+          await set(directRef, creds);
+        } else {
+          const tokenRef = ref(db, `toolTokens/${toolId}`);
+          await set(tokenRef, creds);
+        }
       }
       
       showToast('All tokens and credentials updated successfully', 'success');

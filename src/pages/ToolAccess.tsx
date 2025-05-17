@@ -134,40 +134,87 @@ const ToolAccess: React.FC = () => {
       console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
       
       // Special handling for Stealth Writer which uses ID/Password
-      if (toolId === 'stealth_writer') {
-        // Fetch ID and password from Firebase
-        const idRef = ref(db, `toolCredentials/${toolId}/id`);
-        const passwordRef = ref(db, `toolCredentials/${toolId}/password`);
+      if (toolId === 'stealth_writer' || toolId === 'tool_19') {
+        // First try the direct path in toolTokens
+        const tokenRef = ref(db, `toolTokens/${toolId}`);
+        const snapshot = await get(tokenRef);
         
-        const idSnapshot = await get(idRef);
-        const passwordSnapshot = await get(passwordRef);
-        
-        if (idSnapshot.exists() && passwordSnapshot.exists()) {
-          setToolLoginId(idSnapshot.val());
-          setToolPassword(passwordSnapshot.val());
-          setIsLoading(false);
-          return;
-        } else {
-          // Try fallback to toolTokens structure
-          const credentialsRef = ref(db, `toolTokens/${toolId}`);
-          const credentialsSnapshot = await get(credentialsRef);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          console.log(`Found data for ${toolId}:`, data);
           
-          if (credentialsSnapshot.exists()) {
-            const data = credentialsSnapshot.val();
-            if (typeof data === 'object' && data !== null) {
+          // Handle different data structures
+          if (typeof data === 'object' && data !== null) {
+            // Direct object with id/password fields
+            if (data.id || data.password) {
               setToolLoginId(data.id || null);
               setToolPassword(data.password || null);
-            } else if (typeof data === 'string') {
-              // If it's a string, try to parse it as JSON
-              try {
-                const parsed = JSON.parse(data);
+              setIsLoading(false);
+              return;
+            }
+            
+            // Check for nested fields like tool_19.id
+            if (data.tool_19 && typeof data.tool_19 === 'object') {
+              setToolLoginId(data.tool_19.id || null);
+              setToolPassword(data.tool_19.password || null);
+              setIsLoading(false);
+              return;
+            }
+            
+            // If it's an object but doesn't have expected fields, stringify it
+            const tokenString = JSON.stringify(data);
+            setToolToken(tokenString);
+            setIsLoading(false);
+            return;
+          } else if (typeof data === 'string') {
+            // If it's a string, try to parse it as JSON
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed && typeof parsed === 'object') {
                 setToolLoginId(parsed.id || null);
                 setToolPassword(parsed.password || null);
-              } catch (e) {
-                // If parsing fails, use the string as a token
+              } else {
                 setToolToken(data);
               }
+            } catch (e) {
+              // If parsing fails, use the string as a token
+              setToolToken(data);
             }
+            setIsLoading(false);
+            return;
+          }
+        }
+        
+        // Try alternative paths
+        // Try looking directly in the root for tool_19
+        if (toolId === 'stealth_writer') {
+          const altRef = ref(db, 'tool_19');
+          const altSnapshot = await get(altRef);
+          
+          if (altSnapshot.exists()) {
+            const altData = altSnapshot.val();
+            console.log('Found data in alternate path tool_19:', altData);
+            
+            if (typeof altData === 'object' && altData !== null) {
+              setToolLoginId(altData.id || null);
+              setToolPassword(altData.password || null);
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+        
+        // Try looking in toolCredentials
+        const credRef = ref(db, `toolCredentials/${toolId}`);
+        const credSnapshot = await get(credRef);
+        
+        if (credSnapshot.exists()) {
+          const credData = credSnapshot.val();
+          console.log(`Found credentials for ${toolId}:`, credData);
+          
+          if (typeof credData === 'object' && credData !== null) {
+            setToolLoginId(credData.id || null);
+            setToolPassword(credData.password || null);
             setIsLoading(false);
             return;
           }
