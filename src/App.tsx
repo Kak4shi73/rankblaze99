@@ -21,6 +21,7 @@ import UpdateTokens from './pages/UpdateTokens';
 import Reviews from './pages/Reviews';
 import About from './pages/About';
 import PlaceholderTool from './pages/PlaceholderTool';
+import ThankYou from './pages/ThankYou';
 // import FAQ from './pages/FAQ';
 
 // Components
@@ -83,6 +84,7 @@ function App() {
                     <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/tools" element={<Tools />} />
                     <Route path="/about" element={<About />} />
+                    <Route path="/thankyou" element={<ThankYou />} />
                     {/* <Route path="/faq" element={<FAQ />} /> */}
                     <Route 
                       path="/dashboard" 
