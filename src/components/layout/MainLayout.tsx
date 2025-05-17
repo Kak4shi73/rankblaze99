@@ -16,7 +16,7 @@ const MainLayout = ({ children }: MainLayoutProps) => {
   }, [location.pathname, clearAllToasts]);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen w-full max-w-screen flex flex-col overflow-x-hidden">
       {children}
     </div>
   );

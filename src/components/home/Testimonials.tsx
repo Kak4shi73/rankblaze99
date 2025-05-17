@@ -55,17 +55,17 @@ const Testimonials = () => {
   }, []);
 
   return (
-    <section className="py-20 px-6 md:px-10 relative overflow-hidden">
+    <section className="py-12 sm:py-16 md:py-20 px-4 sm:px-6 md:px-10 relative overflow-hidden">
       {/* Background elements */}
-      <div className="absolute top-1/3 left-10 w-72 h-72 bg-purple-600 rounded-full filter blur-[128px] opacity-10"></div>
-      <div className="absolute bottom-1/3 right-10 w-72 h-72 bg-indigo-600 rounded-full filter blur-[128px] opacity-10"></div>
+      <div className="absolute top-1/3 left-10 w-48 h-48 sm:w-72 sm:h-72 bg-purple-600 rounded-full filter blur-[80px] sm:blur-[128px] opacity-10"></div>
+      <div className="absolute bottom-1/3 right-10 w-48 h-48 sm:w-72 sm:h-72 bg-indigo-600 rounded-full filter blur-[80px] sm:blur-[128px] opacity-10"></div>
       
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">
+        <div className="text-center mb-8 sm:mb-12 md:mb-16">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-purple-300">
             What Our Users Say
           </h2>
-          <p className="text-lg max-w-3xl mx-auto mb-10 text-indigo-100 opacity-80">
+          <p className="text-base sm:text-lg max-w-xs sm:max-w-lg md:max-w-3xl mx-auto mb-6 sm:mb-10 text-indigo-100 opacity-80">
             Join thousands of developers who are already saving with NXTGEN subscriptions.
           </p>
         </div>
@@ -80,28 +80,28 @@ const Testimonials = () => {
               {testimonials.map((testimonial) => (
                 <div 
                   key={testimonial.id}
-                  className="w-full flex-shrink-0 px-4"
+                  className="w-full flex-shrink-0 px-2 sm:px-4"
                 >
-                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-8 md:p-10 shadow-xl border border-gray-700">
-                    <div className="flex items-center mb-6">
+                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl sm:rounded-2xl p-6 sm:p-8 md:p-10 shadow-xl border border-gray-700">
+                    <div className="flex flex-col sm:flex-row sm:items-center mb-4 sm:mb-6">
                       <img 
                         src={testimonial.avatar} 
                         alt={testimonial.name} 
-                        className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500"
+                        className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-indigo-500 mx-auto sm:mx-0 mb-3 sm:mb-0"
                       />
-                      <div className="ml-4">
-                        <h3 className="text-xl font-bold text-white">{testimonial.name}</h3>
-                        <p className="text-indigo-300">{testimonial.role}, {testimonial.company}</p>
+                      <div className="sm:ml-4 text-center sm:text-left">
+                        <h3 className="text-lg sm:text-xl font-bold text-white">{testimonial.name}</h3>
+                        <p className="text-sm sm:text-base text-indigo-300">{testimonial.role}, {testimonial.company}</p>
                       </div>
                     </div>
                     
-                    <p className="text-lg text-indigo-100 mb-6 italic leading-relaxed">"{testimonial.quote}"</p>
+                    <p className="text-base sm:text-lg text-indigo-100 mb-4 sm:mb-6 italic leading-relaxed">&quot;{testimonial.quote}&quot;</p>
                     
-                    <div className="flex text-amber-400">
+                    <div className="flex text-amber-400 justify-center sm:justify-start">
                       {[...Array(5)].map((_, i) => (
                         <Star 
                           key={i}
-                          className={`h-5 w-5 ${i < testimonial.rating ? 'fill-current' : ''}`}
+                          className={`h-4 w-4 sm:h-5 sm:w-5 ${i < testimonial.rating ? 'fill-current' : ''}`}
                         />
                       ))}
                     </div>
@@ -114,22 +114,22 @@ const Testimonials = () => {
           {/* Navigation buttons */}
           <button 
             onClick={goToPrev}
-            className="absolute top-1/2 left-2 md:left-4 transform -translate-y-1/2 bg-gray-800/80 text-white p-2 rounded-full transition hover:bg-gray-700"
+            className="absolute top-1/2 left-0 sm:left-2 md:left-4 transform -translate-y-1/2 bg-gray-800/80 text-white p-1 sm:p-2 rounded-full transition hover:bg-gray-700"
             aria-label="Previous testimonial"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft className="h-4 w-4 sm:h-6 sm:w-6" />
           </button>
           
           <button 
             onClick={goToNext}
-            className="absolute top-1/2 right-2 md:right-4 transform -translate-y-1/2 bg-gray-800/80 text-white p-2 rounded-full transition hover:bg-gray-700"
+            className="absolute top-1/2 right-0 sm:right-2 md:right-4 transform -translate-y-1/2 bg-gray-800/80 text-white p-1 sm:p-2 rounded-full transition hover:bg-gray-700"
             aria-label="Next testimonial"
           >
-            <ChevronRight className="h-6 w-6" />
+            <ChevronRight className="h-4 w-4 sm:h-6 sm:w-6" />
           </button>
           
           {/* Dots indicator */}
-          <div className="flex justify-center mt-8 space-x-2">
+          <div className="flex justify-center mt-4 sm:mt-8 space-x-2">
             {testimonials.map((_, index) => (
               <button
                 key={index}
@@ -139,7 +139,7 @@ const Testimonials = () => {
                   setCurrentIndex(index);
                   setTimeout(() => setIsAnimating(false), 500);
                 }}
-                className={`w-3 h-3 rounded-full transition-colors duration-300 ${
+                className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-colors duration-300 ${
                   index === currentIndex ? 'bg-indigo-500' : 'bg-gray-600'
                 }`}
                 aria-label={`Go to testimonial ${index + 1}`}

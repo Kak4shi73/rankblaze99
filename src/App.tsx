@@ -73,9 +73,9 @@ function App() {
             {/* Redirect handler for SPA navigation */}
             <RedirectHandler />
             <MainLayout>
-              <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 text-gray-100 flex flex-col">
+              <div className="min-h-screen max-w-screen w-full bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 text-gray-100 flex flex-col overflow-x-hidden">
                 <Navbar />
-                <main className="flex-grow">
+                <main className="flex-grow w-full pt-20 sm:pt-24">
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Login />} />
