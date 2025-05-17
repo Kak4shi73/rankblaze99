@@ -9,7 +9,7 @@ export const siteConfig = {
   url: import.meta.env.VITE_SITE_URL || 'https://rankblaze.in',
   logoUrl: '/vite.svg',
   author: 'RANKBLAZE Team',
-  showTemporaryTools: true,
+  showTemporaryTools: false,
   social: {
     twitter: '@rankblaze',
     facebook: 'rankblaze',
