@@ -276,7 +276,8 @@ const Dashboard = () => {
                         {sub.tools && sub.tools.map((tool) => (
                           <span 
                             key={tool.id} 
-                            className="bg-navy-600/50 text-royal-300 text-xs py-1 px-3 rounded-full border border-royal-500/10"
+                            className="bg-navy-600/50 text-royal-300 text-xs py-1 px-3 rounded-full border border-royal-500/10 hover:bg-navy-500/50 cursor-pointer"
+                            onClick={() => accessTool(tool.id)}
                           >
                             {getToolName(tool.id)}
                           </span>
@@ -296,6 +297,14 @@ const Dashboard = () => {
                     </div>
                   </div>
                 ))}
+                <div className="flex justify-center mt-6">
+                  <button 
+                    onClick={() => navigate('/tools')}
+                    className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Get More Tool Access
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="text-center py-8">
