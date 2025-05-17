@@ -45,6 +45,8 @@ const ToolCard = ({ tool }: ToolCardProps) => {
       8: 'pl_QW3BXmf2ucsRj6', // Spotify Premium
       9: 'pl_QW3DHVp6U8BaiU', // YouTube Premium
       10: 'pl_QW3DHVp6U8BaiU', // Helium10
+      19: 'pl_QW3T3PwRatrXTn', // Stealth Writer
+      20: 'pl_QW3UWkeN1bY5Q5', // Hix Bypass
     };
 
     return buttonIds[toolId] || null;

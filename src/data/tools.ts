@@ -286,5 +286,37 @@ export const toolsData: Tool[] = [
     icon: Image,
     gradient: 'from-blue-500 to-indigo-600',
     category: 'Design'
+  },
+  {
+    id: 19,
+    name: 'Stealth Writer',
+    description: 'Advanced AI content creation tool with plagiarism avoidance',
+    price: 449,
+    features: [
+      'AI-powered content generation',
+      'Plagiarism detection & avoidance',
+      'Multiple writing styles',
+      'SEO optimization',
+      'Content repurposing'
+    ],
+    icon: Pen,
+    gradient: 'from-indigo-500 to-blue-600',
+    category: 'AI'
+  },
+  {
+    id: 20,
+    name: 'Hix Bypass',
+    description: 'Advanced content protection bypass tool for researchers',
+    price: 299,
+    features: [
+      'Content access tools',
+      'Research assistance',
+      'Data extraction',
+      'Academic resources',
+      'Customizable settings'
+    ],
+    icon: Lock,
+    gradient: 'from-amber-500 to-orange-600',
+    category: 'Research'
   }
 ];

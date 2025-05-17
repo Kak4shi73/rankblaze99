@@ -72,7 +72,9 @@ const AVAILABLE_TOOLS = [
   { id: 'skillshare', name: 'Skillshare', price: 99 },
   { id: 'prezi', name: 'Prezi', price: 149 },
   { id: 'vistacreate', name: 'VistaCreate', price: 99 },
-  { id: 'vecteezy', name: 'Vecteezy', price: 99 }
+  { id: 'vecteezy', name: 'Vecteezy', price: 99 },
+  { id: 'stealth_writer', name: 'Stealth Writer', price: 449 },
+  { id: 'hix_bypass', name: 'Hix Bypass', price: 299 }
 ];
 
 const Admin = () => {
