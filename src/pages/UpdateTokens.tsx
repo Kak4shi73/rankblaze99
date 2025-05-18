@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Search, Check, Copy } from 'lucide-react';
+import { ArrowLeft, Save, Search, Check, Copy, Plus, Trash } from 'lucide-react';
 import { ref, onValue, update, get, set } from 'firebase/database';
 import { db } from '../config/firebase';
 import { useToast } from '../context/ToastContext';
@@ -13,7 +13,7 @@ interface ToolCredentials {
 
 const UpdateTokens = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [tokens, setTokens] = useState<{ [key: string]: string }>({});
+  const [tokens, setTokens] = useState<{ [key: string]: string | string[] }>({});
   const [credentials, setCredentials] = useState<{ [key: string]: ToolCredentials }>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedTool, setCopiedTool] = useState<string | null>(null);
@@ -38,7 +38,7 @@ const UpdateTokens = () => {
         return onValue(tokensRef, async (snapshot) => {
           if (snapshot.exists()) {
             const tokenData = snapshot.val();
-            const processedTokens: {[key: string]: string} = {};
+            const processedTokens: {[key: string]: string | string[]} = {};
             const processedCredentials: {[key: string]: ToolCredentials} = {};
             
             // Process each token to extract the value property or use the direct value
@@ -66,7 +66,42 @@ const UpdateTokens = () => {
                     processedTokens[toolId] = tokenValue as string;
                   }
                 }
-              } else {
+              } 
+              // Special handling for ChatGPT Plus (tool_1) with multiple tokens
+              else if (toolId === 'tool_1') {
+                // If it's already an array, use it directly
+                if (Array.isArray(tokenValue)) {
+                  processedTokens[toolId] = tokenValue;
+                } 
+                // If it's a string, convert it to a single-item array
+                else if (typeof tokenValue === 'string') {
+                  processedTokens[toolId] = [tokenValue];
+                } 
+                // If it's an object with a value property
+                else if (typeof tokenValue === 'object' && tokenValue !== null) {
+                  // @ts-ignore
+                  if (tokenValue.value) {
+                    // @ts-ignore
+                    processedTokens[toolId] = Array.isArray(tokenValue.value) 
+                      // @ts-ignore
+                      ? tokenValue.value 
+                      // @ts-ignore
+                      : [tokenValue.value];
+                  }
+                  // Try to parse it as an array directly
+                  else {
+                    try {
+                      // @ts-ignore
+                      processedTokens[toolId] = Array.isArray(tokenValue) 
+                        ? tokenValue 
+                        : [JSON.stringify(tokenValue)];
+                    } catch (e) {
+                      processedTokens[toolId] = [''];
+                    }
+                  }
+                }
+              }
+              else {
                 if (typeof tokenValue === 'string') {
                   processedTokens[toolId] = tokenValue as string;
                 } else if (typeof tokenValue === 'object' && tokenValue !== null) {
@@ -123,11 +158,68 @@ const UpdateTokens = () => {
     };
   }, [navigate, showToast]);
 
-  const handleTokenChange = (toolId: string, value: string) => {
-    setTokens(prev => ({
-      ...prev,
-      [toolId]: value
-    }));
+  const handleTokenChange = (toolId: string, value: string, index?: number) => {
+    // If it's ChatGPT Plus (tool_1) with multiple tokens
+    if (toolId === 'tool_1' && typeof index === 'number') {
+      setTokens(prev => {
+        const currentTokens = Array.isArray(prev[toolId]) 
+          ? [...prev[toolId] as string[]] 
+          : [prev[toolId] as string || ''];
+        
+        currentTokens[index] = value;
+        
+        return {
+          ...prev,
+          [toolId]: currentTokens
+        };
+      });
+    } else {
+      // Regular single token handling
+      setTokens(prev => ({
+        ...prev,
+        [toolId]: value
+      }));
+    }
+  };
+
+  const addTokenToTool1 = () => {
+    setTokens(prev => {
+      const currentTokens = Array.isArray(prev['tool_1']) 
+        ? [...prev['tool_1'] as string[]] 
+        : [prev['tool_1'] as string || ''];
+      
+      // Only add new token if less than 5 tokens
+      if (currentTokens.length < 5) {
+        currentTokens.push('');
+      } else {
+        showToast('Maximum 5 tokens allowed for ChatGPT Plus', 'error');
+      }
+      
+      return {
+        ...prev,
+        'tool_1': currentTokens
+      };
+    });
+  };
+
+  const removeTokenFromTool1 = (index: number) => {
+    setTokens(prev => {
+      const currentTokens = Array.isArray(prev['tool_1']) 
+        ? [...prev['tool_1'] as string[]] 
+        : [prev['tool_1'] as string || ''];
+      
+      // Only remove if we have more than 1 token
+      if (currentTokens.length > 1) {
+        currentTokens.splice(index, 1);
+      } else {
+        currentTokens[0] = '';
+      }
+      
+      return {
+        ...prev,
+        'tool_1': currentTokens
+      };
+    });
   };
 
   const handleCredentialChange = (toolId: string, field: 'id' | 'password', value: string) => {
@@ -176,9 +268,37 @@ const UpdateTokens = () => {
         showToast(`Credentials for ${toolId} updated successfully`, 'success');
         return;
       }
+      
+      // Special handling for ChatGPT Plus (tool_1) with multiple tokens
+      if (toolId === 'tool_1') {
+        const chatgptTokens = tokens[toolId];
+        
+        if (!Array.isArray(chatgptTokens) || chatgptTokens.length === 0 || 
+            chatgptTokens.every(t => !t || t.trim() === '')) {
+          showToast('Please enter at least one token value', 'error');
+          return;
+        }
+        
+        // Remove any empty tokens
+        const validTokens = Array.isArray(chatgptTokens) 
+          ? chatgptTokens.filter(token => token && token.trim() !== '')
+          : [chatgptTokens];
+        
+        if (validTokens.length === 0) {
+          showToast('Please enter at least one token value', 'error');
+          return;
+        }
+        
+        const tokenRef = ref(db, `toolTokens/${toolId}`);
+        await set(tokenRef, validTokens);
+        
+        console.log(`Multiple tokens updated for ${toolId}:`, validTokens);
+        showToast(`${validTokens.length} tokens for ${toolId} updated successfully`, 'success');
+        return;
+      }
 
       // Normal token handling for other tools
-      if (!tokens[toolId] || tokens[toolId].trim() === '') {
+      if (!tokens[toolId] || (typeof tokens[toolId] === 'string' && tokens[toolId].trim() === '')) {
         showToast('Please enter a token value', 'error');
         return;
       }
@@ -198,15 +318,29 @@ const UpdateTokens = () => {
 
   const updateAllTokens = async () => {
     try {
-      const tokenUpdates: Record<string, string> = {};
+      const tokenUpdates: Record<string, string | string[]> = {};
       const credentialUpdates: Record<string, ToolCredentials> = {};
       let hasValidUpdates = false;
 
       // Process tokens and validate
       Object.entries(tokens).forEach(([toolId, token]) => {
-        if (toolId !== 'stealth_writer' && toolId !== 'tool_19' && token && token.trim() !== '') {
-          tokenUpdates[toolId] = token;
-          hasValidUpdates = true;
+        if (toolId !== 'stealth_writer' && toolId !== 'tool_19') {
+          if (toolId === 'tool_1') {
+            // For ChatGPT Plus, filter out empty tokens
+            if (Array.isArray(token)) {
+              const validTokens = token.filter(t => t && t.trim() !== '');
+              if (validTokens.length > 0) {
+                tokenUpdates[toolId] = validTokens;
+                hasValidUpdates = true;
+              }
+            } else if (token && typeof token === 'string' && token.trim() !== '') {
+              tokenUpdates[toolId] = [token];
+              hasValidUpdates = true;
+            }
+          } else if (token && typeof token === 'string' && token.trim() !== '') {
+            tokenUpdates[toolId] = token;
+            hasValidUpdates = true;
+          }
         }
       });
 
@@ -255,9 +389,17 @@ const UpdateTokens = () => {
     }
   };
 
-  const copyToken = (toolId: string) => {
-    if (tokens[toolId]) {
-      navigator.clipboard.writeText(tokens[toolId]);
+  const copyToken = (toolId: string, index?: number) => {
+    if (toolId === 'tool_1' && Array.isArray(tokens[toolId]) && typeof index === 'number') {
+      const tokenArray = tokens[toolId] as string[];
+      if (tokenArray[index]) {
+        navigator.clipboard.writeText(tokenArray[index]);
+        setCopiedTool(`${toolId}_${index}`);
+        setTimeout(() => setCopiedTool(null), 2000);
+        showToast('Token copied to clipboard', 'success');
+      }
+    } else if (tokens[toolId] && typeof tokens[toolId] === 'string') {
+      navigator.clipboard.writeText(tokens[toolId] as string);
       setCopiedTool(toolId);
       setTimeout(() => setCopiedTool(null), 2000);
       showToast('Token copied to clipboard', 'success');
@@ -272,6 +414,11 @@ const UpdateTokens = () => {
   // Helper function to determine if a tool uses ID/password
   const usesIdPassword = (toolId: string) => {
     return toolId === 'stealth_writer' || toolId === 'tool_19';
+  };
+
+  // Helper function for multiple tokens
+  const hasMultipleTokens = (toolId: string) => {
+    return toolId === 'tool_1';
   };
 
   if (isLoading) {
@@ -317,7 +464,7 @@ const UpdateTokens = () => {
           </div>
         </div>
 
-        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+        <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
           <div className="p-6 border-b border-gray-700">
             <h2 className="text-xl font-bold text-white">Tool Tokens</h2>
             <p className="text-gray-400 mt-1">
@@ -339,9 +486,10 @@ const UpdateTokens = () => {
                   // Convert tool.id to string if it's a number
                   const toolId = typeof tool.id === 'number' ? `tool_${tool.id}` : String(tool.id);
                   const isIdPasswordTool = usesIdPassword(toolId);
+                  const isMultipleTokensTool = hasMultipleTokens(toolId);
                   
                   return (
-                    <tr key={toolId}>
+                    <tr key={toolId} className="bg-gray-800">
                       <td className="px-6 py-4">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600">
@@ -377,9 +525,58 @@ const UpdateTokens = () => {
                               />
                             </div>
                           </div>
+                        ) : isMultipleTokensTool ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-xs font-medium text-gray-400">
+                                Multiple Tokens (Maximum 5)
+                              </label>
+                              <button 
+                                onClick={addTokenToTool1}
+                                className="inline-flex items-center px-2 py-1 text-xs bg-green-700 text-white rounded hover:bg-green-600 transition-colors"
+                                disabled={Array.isArray(tokens[toolId]) && (tokens[toolId] as string[]).length >= 5}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add Token
+                              </button>
+                            </div>
+                            
+                            {Array.isArray(tokens[toolId]) && (tokens[toolId] as string[]).map((token, index) => (
+                              <div key={`token_${index}`} className="flex items-center space-x-2">
+                                <textarea
+                                  value={token}
+                                  onChange={(e) => handleTokenChange(toolId, e.target.value, index)}
+                                  className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                  rows={2}
+                                  placeholder={`Enter token ${index + 1} value here`}
+                                />
+                                <div className="flex flex-col space-y-2">
+                                  <button
+                                    onClick={() => copyToken(toolId, index)}
+                                    className="p-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors"
+                                    title="Copy token"
+                                  >
+                                    {copiedTool === `${toolId}_${index}` ? 
+                                      <Check className="h-4 w-4 text-green-400" /> : 
+                                      <Copy className="h-4 w-4 text-gray-300" />
+                                    }
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => removeTokenFromTool1(index)}
+                                    className="p-2 bg-red-800 text-white rounded hover:bg-red-700 transition-colors"
+                                    title="Remove token"
+                                    disabled={(tokens[toolId] as string[]).length <= 1}
+                                  >
+                                    <Trash className="h-4 w-4 text-gray-300" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <textarea
-                            value={tokens[toolId] || ''}
+                            value={tokens[toolId] as string || ''}
                             onChange={(e) => handleTokenChange(toolId, e.target.value)}
                             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             rows={2}
@@ -396,7 +593,7 @@ const UpdateTokens = () => {
                             Update
                           </button>
                           
-                          {!isIdPasswordTool && (
+                          {!isIdPasswordTool && !isMultipleTokensTool && (
                             <button
                               onClick={() => copyToken(toolId)}
                               className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm flex items-center"

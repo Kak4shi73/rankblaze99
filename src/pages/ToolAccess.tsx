@@ -118,10 +118,10 @@ const ToolAccess: React.FC = () => {
   const [hasAccess, setHasAccess] = useState<boolean>(false);
   const [access, setAccess] = useState<Access | null>(null);
   const [toolInfo, setToolInfo] = useState<ToolInfoItem | null>(null);
-  const [tokenCopied, setTokenCopied] = useState<boolean>(false);
+  const [tokenCopied, setTokenCopied] = useState<boolean | string>(false);
   const [idCopied, setIdCopied] = useState<boolean>(false);
   const [passwordCopied, setPasswordCopied] = useState<boolean>(false);
-  const [toolToken, setToolToken] = useState<string | null>(null);
+  const [toolToken, setToolToken] = useState<string | string[] | null>(null);
   const [toolLoginId, setToolLoginId] = useState<string | null>(null);
   const [toolPassword, setToolPassword] = useState<string | null>(null);
 
@@ -217,6 +217,42 @@ const ToolAccess: React.FC = () => {
             setToolPassword(credData.password || null);
             setIsLoading(false);
             return;
+          }
+        }
+      }
+      
+      // Special handling for ChatGPT Plus which uses multiple tokens
+      if (toolId === 'chatgpt_plus' || toolId === 'tool_1') {
+        const tokenRef = ref(db, `toolTokens/tool_1`);
+        const snapshot = await get(tokenRef);
+        
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          console.log(`Found data for ${toolId}:`, data);
+          
+          // If it's already an array, use it directly
+          if (Array.isArray(data)) {
+            setToolToken(data);
+            setIsLoading(false);
+            return;
+          }
+          // If it's a string, convert it to a single-item array
+          else if (typeof data === 'string') {
+            setToolToken([data]);
+            setIsLoading(false);
+            return;
+          }
+          // If it's an object with a value property
+          else if (typeof data === 'object' && data !== null) {
+            if (data.value) {
+              if (Array.isArray(data.value)) {
+                setToolToken(data.value);
+              } else {
+                setToolToken([data.value]);
+              }
+              setIsLoading(false);
+              return;
+            }
           }
         }
       }
@@ -386,8 +422,28 @@ const ToolAccess: React.FC = () => {
     window.open(downloadUrl, '_blank');
   };
 
-  const copyToken = (): void => {
-    if (toolToken && hasAccess) {
+  const copyToken = (index?: number): void => {
+    if (!hasAccess) return;
+    
+    // If it's ChatGPT Plus with multiple tokens
+    if (Array.isArray(toolToken) && toolToken.length > 0) {
+      // If specific index is provided, copy that token
+      if (typeof index === 'number' && index >= 0 && index < toolToken.length) {
+        navigator.clipboard.writeText(toolToken[index]);
+        setTokenCopied(`token_${index}`);
+        setTimeout(() => setTokenCopied(false), 2000);
+        showToast(`Token ${index + 1} copied to clipboard`, 'success');
+      }
+      // Otherwise copy the first token
+      else {
+        navigator.clipboard.writeText(toolToken[0]);
+        setTokenCopied('token_0');
+        setTimeout(() => setTokenCopied(false), 2000);
+        showToast('First token copied to clipboard', 'success');
+      }
+    }
+    // For single token tools
+    else if (typeof toolToken === 'string' && toolToken) {
       navigator.clipboard.writeText(toolToken);
       setTokenCopied(true);
       setTimeout(() => setTokenCopied(false), 2000);
@@ -588,6 +644,58 @@ const ToolAccess: React.FC = () => {
                       First copy your ID and password, then click "Open {toolInfo?.name}" and use them to log in.
                     </p>
                   </div>
+                ) : Array.isArray(toolToken) ? (
+                  // Multiple tokens display for ChatGPT Plus
+                  <div className="flex flex-col space-y-5">
+                    <div className="mb-2">
+                      <h3 className="text-lg font-semibold text-white mb-2">Multiple Tokens Available ({toolToken.length})</h3>
+                      <p className="text-indigo-200 text-sm mb-4">
+                        You have access to {toolToken.length} tokens for {toolInfo?.name}. 
+                        If one doesn't work, try another.
+                      </p>
+                    </div>
+
+                    {toolToken.map((token, index) => (
+                      <div key={`token_${index}`} className="mb-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-sm font-medium text-indigo-300">Token {index + 1}:</label>
+                          <button
+                            onClick={() => copyToken(index)}
+                            className="px-2 py-1 text-xs bg-indigo-700 text-white rounded hover:bg-indigo-600 transition-colors flex items-center"
+                          >
+                            {tokenCopied === `token_${index}` ? (
+                              <>
+                                <Check className="h-3 w-3 mr-1" />
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <div className="p-4 bg-gray-800 rounded-lg border border-gray-700 font-mono text-sm text-amber-400 break-all">
+                            {token}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button
+                      onClick={openTool}
+                      className="w-full flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    >
+                      <ExternalLink className="h-5 w-5 mr-2" />
+                      Open {toolInfo?.name}
+                    </button>
+                    
+                    <p className="text-center text-indigo-200 mt-2">
+                      Choose and copy a token, then click "Open {toolInfo?.name}" and use the token to log in.
+                    </p>
+                  </div>
                 ) : toolToken ? (
                   // Standard token display for other tools
                   <div className="flex flex-col space-y-5">
@@ -596,11 +704,11 @@ const ToolAccess: React.FC = () => {
                         {toolToken}
                       </div>
                       <button
-                        onClick={copyToken}
+                        onClick={() => copyToken()}
                         className="absolute top-3 right-3 p-2 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors"
                         title="Copy token"
                       >
-                        {tokenCopied ? (
+                        {tokenCopied === true ? (
                           <Check className="h-5 w-5 text-green-400" />
                         ) : (
                           <Copy className="h-5 w-5 text-gray-300" />
@@ -610,7 +718,7 @@ const ToolAccess: React.FC = () => {
                     
                     <div className="flex flex-col sm:flex-row gap-4">
                       <button
-                        onClick={copyToken}
+                        onClick={() => copyToken()}
                         className="flex-1 flex items-center justify-center px-6 py-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                       >
                         <Copy className="h-5 w-5 mr-2" />
