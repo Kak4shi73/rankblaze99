@@ -684,55 +684,6 @@ const Admin = () => {
           </div>
         </div>
 
-        {/* User Manager Section */}
-        <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
-          <h3 className="text-xl font-semibold mb-4 text-gray-800">Registered Users</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-4 py-2 text-gray-600">Name</th>
-                  <th className="px-4 py-2 text-gray-600">Email</th>
-                  <th className="px-4 py-2 text-gray-600">Role</th>
-                  <th className="px-4 py-2 text-gray-600">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {users.slice(0, 4).map(user => (
-                  <tr key={user.id}>
-                    <td className="px-4 py-2 text-gray-800">{user.name || 'N/A'}</td>
-                    <td className="px-4 py-2 text-gray-600">{user.email}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        user.isAdmin 
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {user.isAdmin ? 'Admin' : 'User'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <button 
-                        onClick={() => setShowUserDetails(user.id)}
-                        className="text-blue-500 hover:text-blue-600"
-                      >
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {users.length > 4 && (
-            <div className="mt-4 text-center">
-              <button className="text-blue-500 hover:text-blue-600">
-                View all users ({users.length})
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Users Table */}
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <div className="p-6 border-b border-gray-700">
