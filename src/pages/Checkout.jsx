@@ -1,35 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 
 const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [cart, setCart] = useState([]);
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  // Fetch cart items from local storage
-  useEffect(() => {
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-      const parsedCart = JSON.parse(savedCart);
-      setCart(parsedCart);
-      
-      // Calculate total amount
-      const total = parsedCart.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
-      setTotalAmount(total);
-    }
-  }, []);
+  const { cartItems, clearCart, getTotalPrice } = useCart();
+  const totalAmount = getTotalPrice();
 
   // Redirect if no user or empty cart
   useEffect(() => {
     if (!user) {
       navigate('/login');
-    } else if (!cart.length) {
+    } else if (!cartItems.length) {
       navigate('/cart');
     }
-  }, [user, cart, navigate]);
+  }, [user, cartItems, navigate]);
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
@@ -43,14 +32,14 @@ const Checkout = () => {
 
       setTimeout(() => {
         // Clear cart
-        localStorage.setItem('cart', JSON.stringify([]));
+        clearCart();
         
         // Redirect to success page
         navigate('/payment-success', { 
           state: { 
             orderId: orderId,
             amount: totalAmount,
-            tools: cart 
+            tools: cartItems 
           } 
         });
       }, 2000);
@@ -58,6 +47,7 @@ const Checkout = () => {
     } catch (error) {
       console.error('Checkout error:', error);
       setIsProcessing(false);
+      setErrorMessage('There was an error processing your payment. Please try again.');
       
       // Redirect to error page
       navigate('/payment-error', { 
@@ -69,184 +59,75 @@ const Checkout = () => {
   };
 
   return (
-    <div className="checkout-container">
-      <h2>Checkout</h2>
-      
-      <div className="order-summary">
-        <h3>Order Summary</h3>
-        <div className="order-items">
-          {cart.map((item) => (
-            <div key={item.id} className="order-item">
-              <div className="item-info">
-                <h4>{item.name}</h4>
-                <p className="quantity">Quantity: {item.quantity || 1}</p>
+    <div className="min-h-screen pt-24 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
+      <div className="container mx-auto p-4 max-w-4xl">
+        <h1 className="text-3xl font-bold text-white mb-8">Checkout</h1>
+        
+        <div className="bg-gray-800 rounded-lg p-6 mb-6 shadow-lg">
+          <h2 className="text-xl font-semibold text-white mb-4 pb-3 border-b border-gray-700">Order Summary</h2>
+          
+          <div className="space-y-4 mb-6">
+            {cartItems.map((item) => (
+              <div key={item.id} className="flex justify-between items-center py-3 border-b border-gray-700">
+                <div>
+                  <h3 className="text-white font-medium">{item.name}</h3>
+                  <p className="text-gray-400 text-sm">Quantity: {item.quantity || 1}</p>
+                </div>
+                <div className="text-white font-bold">₹{item.price * (item.quantity || 1)}</div>
               </div>
-              <div className="item-price">₹{item.price * (item.quantity || 1)}</div>
+            ))}
+          </div>
+          
+          <div className="space-y-2 pt-2">
+            <div className="flex justify-between text-gray-300">
+              <span>Subtotal:</span>
+              <span>₹{totalAmount}</span>
             </div>
-          ))}
-        </div>
-        
-        <div className="order-total">
-          <div className="total-row">
-            <span>Subtotal:</span>
-            <span>₹{totalAmount}</span>
-          </div>
-          <div className="total-row">
-            <span>Tax:</span>
-            <span>₹0</span>
-          </div>
-          <div className="total-row grand-total">
-            <span>Total:</span>
-            <span>₹{totalAmount}</span>
+            <div className="flex justify-between text-gray-300">
+              <span>Tax:</span>
+              <span>₹0</span>
+            </div>
+            <div className="flex justify-between font-bold text-white pt-2 mt-2 border-t border-gray-700">
+              <span>Total:</span>
+              <span>₹{totalAmount}</span>
+            </div>
           </div>
         </div>
+        
+        <div className="bg-gray-800 rounded-lg p-6 mb-6 shadow-lg">
+          <h2 className="text-xl font-semibold text-white mb-4 pb-3 border-b border-gray-700">Payment Information</h2>
+          
+          <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-md mb-6">
+            Payment integration has been removed. This is a placeholder for your new payment method.
+          </div>
+          
+          {errorMessage && (
+            <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-md mb-6">
+              {errorMessage}
+            </div>
+          )}
+          
+          <button 
+            onClick={handlePlaceOrder}
+            disabled={isProcessing || !cartItems.length}
+            className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center mb-4 ${
+              isProcessing || !cartItems.length
+                ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+            }`}
+          >
+            {isProcessing ? 'Processing...' : 'Place Order'}
+          </button>
+          
+          <button 
+            onClick={() => navigate('/cart')}
+            disabled={isProcessing}
+            className="w-full py-3 border border-gray-600 rounded-md text-gray-300 hover:bg-gray-700 transition-colors"
+          >
+            Back to Cart
+          </button>
+        </div>
       </div>
-      
-      <div className="payment-section">
-        <h3>Payment Information</h3>
-        <p className="payment-notice">
-          Payment integration has been removed. This is a placeholder for your new payment method.
-        </p>
-        
-        <button 
-          className="place-order-btn"
-          onClick={handlePlaceOrder}
-          disabled={isProcessing || !cart.length}
-        >
-          {isProcessing ? 'Processing...' : 'Place Order'}
-        </button>
-      </div>
-      
-      <button 
-        className="back-to-cart" 
-        onClick={() => navigate('/cart')}
-        disabled={isProcessing}
-      >
-        Back to Cart
-      </button>
-      
-      <style jsx>{`
-        .checkout-container {
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 20px;
-        }
-        
-        h2 {
-          margin-bottom: 30px;
-          color: #333;
-        }
-        
-        .order-summary, .payment-section {
-          background: #f8f9fa;
-          border-radius: 8px;
-          padding: 20px;
-          margin-bottom: 30px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        
-        h3 {
-          margin-top: 0;
-          margin-bottom: 20px;
-          color: #333;
-          border-bottom: 1px solid #eee;
-          padding-bottom: 10px;
-        }
-        
-        .order-items {
-          margin-bottom: 20px;
-        }
-        
-        .order-item {
-          display: flex;
-          justify-content: space-between;
-          padding: 10px 0;
-          border-bottom: 1px solid #eee;
-        }
-        
-        .item-info h4 {
-          margin: 0 0 5px;
-          font-size: 16px;
-        }
-        
-        .quantity {
-          color: #666;
-          font-size: 14px;
-          margin: 0;
-        }
-        
-        .item-price {
-          font-weight: bold;
-        }
-        
-        .order-total {
-          margin-top: 20px;
-        }
-        
-        .total-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 5px 0;
-        }
-        
-        .grand-total {
-          font-weight: bold;
-          border-top: 1px solid #ddd;
-          margin-top: 10px;
-          padding-top: 10px;
-          font-size: 18px;
-        }
-        
-        .payment-notice {
-          background: #ffe8e8;
-          border-left: 4px solid #ff6b6b;
-          padding: 15px;
-          margin: 20px 0;
-          color: #333;
-        }
-        
-        .place-order-btn {
-          width: 100%;
-          padding: 12px;
-          background: #4CAF50;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          font-size: 16px;
-          font-weight: bold;
-          cursor: pointer;
-          transition: background 0.3s;
-        }
-        
-        .place-order-btn:hover:not(:disabled) {
-          background: #45a049;
-        }
-        
-        .place-order-btn:disabled {
-          background: #cccccc;
-          cursor: not-allowed;
-        }
-        
-        .back-to-cart {
-          display: block;
-          margin: 0 auto;
-          padding: 10px 20px;
-          background: none;
-          border: 1px solid #ccc;
-          border-radius: 4px;
-          cursor: pointer;
-          color: #666;
-        }
-        
-        .back-to-cart:hover:not(:disabled) {
-          background: #f5f5f5;
-        }
-        
-        .back-to-cart:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      `}</style>
     </div>
   );
 };
