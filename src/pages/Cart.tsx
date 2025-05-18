@@ -6,18 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import CurrencySelector from '../components/cart/CurrencySelector';
 import { Currency, convertCurrency, formatCurrency } from '../utils/currencyConverter';
-import { createOrder } from '../utils/cashfree';
-import { db } from '../config/firebase';
-import { ref, set, get } from 'firebase/database';
-import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
-
-// Firestore database instance
-const firestore = getFirestore();
-// Firestore collection name for orders
-const ORDERS_COLLECTION = 'Cashfree orders';
 
 const Cart = () => {
-  const { cartItems, removeFromCart, clearCart, pendingOrderId, isCreatingOrder: isPreparingOrder } = useCart();
+  const { cartItems, removeFromCart, clearCart } = useCart();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -35,26 +26,6 @@ const Cart = () => {
   const gstOnFee = transactionFee * 0.18; // 18% GST on transaction fee
   const total = convertedSubtotal + transactionFee + gstOnFee;
 
-  // Helper function to save order to both Realtime DB and Firestore
-  const saveOrderData = async (orderId: string, orderData: any) => {
-    try {
-      // Save to Realtime Database
-      const rtdbRef = ref(db, `orders/${orderId}`);
-      await set(rtdbRef, orderData);
-      
-      // Save to Firestore
-      const firestoreRef = doc(firestore, ORDERS_COLLECTION, orderId);
-      await setDoc(firestoreRef, {
-        ...orderData,
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now()
-      });
-    } catch (error) {
-      console.error('Error saving order data:', error);
-      // Continue execution even if saving to one DB fails
-    }
-  };
-
   const handleCheckout = async () => {
     if (!user) {
       showToast('Please login to continue', 'error');
@@ -71,175 +42,13 @@ const Cart = () => {
     setErrorMessage(null);
     
     try {
-      showToast('Initiating checkout...', 'info');
+      showToast('Redirecting to checkout...', 'info');
       
-      // Check if Cashfree SDK is available
-      if (typeof window.Cashfree === 'undefined') {
-        throw new Error('Payment gateway not available. Please try again later.');
-      }
-      
-      let orderId = pendingOrderId;
-      let paymentSessionId = null;
-      
-      // If we have a pending order ID, try to use it
-      if (orderId) {
-        try {
-          // Get the existing order from the database
-          const orderRef = ref(db, `orders/${orderId}`);
-          const orderSnapshot = await get(orderRef);
-          
-          if (orderSnapshot.exists()) {
-            const orderData = orderSnapshot.val();
-            // Check if the order has a payment session ID and is still valid
-            if (orderData.paymentSessionId) {
-              paymentSessionId = orderData.paymentSessionId;
-              console.log('Using existing order:', orderId, 'with session:', paymentSessionId);
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching existing order:', error);
-          // If there's an error, we'll create a new order below
-          orderId = null;
-        }
-      }
-      
-      // If we don't have a valid order yet, create a new one
-      if (!orderId || !paymentSessionId) {
-        // Generate a unique order ID
-        const uniqueOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        orderId = uniqueOrderId;
-        
-        // Create an order in Cashfree
-        const orderOptions = {
-          amount: Math.round(total * 100) / 100, // Ensure proper rounding
-          currency: 'INR',
-          customerName: user?.name || '',
-          customerPhone: '9999999999', // Use a default phone number since user.phone is not available
-          customerEmail: user?.email || '',
-          notes: {
-            userId: user?.id || '',
-            items: JSON.stringify(cartItems.map(item => ({ id: item.id, name: item.name })))
-          }
-        };
-        
-        console.log('Creating new order with options:', orderOptions);
-        
-        // Save pending order to both databases
-        const orderData = {
-          userId: user?.id,
-          amount: Math.round(total * 100) / 100,
-          items: cartItems,
-          status: 'pending',
-          paymentMethod: 'cashfree',
-          createdAt: new Date().toISOString(),
-        };
-        
-        await saveOrderData(uniqueOrderId, orderData);
-        
-        // Create order with Cashfree
-        const order = await createOrder(orderOptions);
-        console.log('Order created:', order);
-        
-        if (!order || !order.payment_session_id) {
-          throw new Error('Failed to create order. Please try again.');
-        }
-        
-        paymentSessionId = order.payment_session_id;
-        
-        // Update order with payment session ID in both databases
-        const updatedOrderData = {
-          userId: user?.id,
-          amount: Math.round(total * 100) / 100,
-          items: cartItems,
-          status: 'payment_initiated',
-          paymentMethod: 'cashfree',
-          orderId: order.orderId,
-          paymentSessionId: order.payment_session_id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        await saveOrderData(order.orderId, updatedOrderData);
-      }
-      
-      showToast('Redirecting to payment gateway...', 'success');
-      
-      // Initialize and open Cashfree checkout
-      const cashfree = new window.Cashfree(paymentSessionId);
-      
-      // Handle payment events
-      cashfree.on('payment_success', async (data: any) => {
-        console.log('Payment success:', data);
-        showToast('Payment successful!', 'success');
-        
-        // Update order status in both databases
-        const completedOrderData = {
-          userId: user?.id,
-          amount: Math.round(total * 100) / 100,
-          items: cartItems,
-          status: 'completed',
-          paymentMethod: 'cashfree',
-          orderId: orderId,
-          paymentId: `cf_${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        await saveOrderData(orderId, completedOrderData);
-        
-        // Clear cart after successful payment
-        clearCart();
-        
-        // Redirect to dashboard
-        navigate('/dashboard');
-      });
-      
-      cashfree.on('payment_error', (data: any) => {
-        console.error('Payment error:', data);
-        showToast('Payment failed', 'error');
-        setIsCheckingOut(false);
-        
-        // Update order status in both databases
-        const failedOrderData = {
-          userId: user?.id,
-          amount: Math.round(total * 100) / 100,
-          items: cartItems,
-          status: 'failed',
-          paymentMethod: 'cashfree',
-          orderId: orderId,
-          errorMessage: data.error?.reason || 'Unknown error',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        saveOrderData(orderId, failedOrderData);
-      });
-      
-      cashfree.on('close', () => {
-        console.log('Payment window closed');
-        showToast('Payment cancelled', 'info');
-        setIsCheckingOut(false);
-        
-        // Update order status in both databases
-        const cancelledOrderData = {
-          userId: user?.id,
-          amount: Math.round(total * 100) / 100,
-          items: cartItems,
-          status: 'cancelled',
-          paymentMethod: 'cashfree',
-          orderId: orderId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        saveOrderData(orderId, cancelledOrderData);
-      });
-      
-      // Redirect to Cashfree checkout directly
-      cashfree.redirect();
+      // Navigate to the checkout page
+      navigate('/checkout');
     } catch (error) {
       console.error('Checkout error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Payment initialization failed';
+      const errorMsg = error instanceof Error ? error.message : 'Checkout initialization failed';
       setErrorMessage(errorMsg);
       showToast(errorMsg, 'error');
       setIsCheckingOut(false);
@@ -248,152 +57,134 @@ const Cart = () => {
 
   return (
     <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto p-4">
         <h1 className="text-3xl font-bold text-white mb-8">Your Cart</h1>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Cart Items */}
-          <div className="lg:col-span-2">
-            {cartItems.length > 0 ? (
-              <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
-                <div className="p-6 border-b border-gray-700">
-                  <h2 className="text-xl font-bold text-white">Cart Items ({cartItems.length})</h2>
-                </div>
-                
-                <div className="divide-y divide-gray-700">
-                  {cartItems.map((item) => (
-                    <div key={item.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">{item.name}</h3>
-                        <p className="text-indigo-300 text-sm mt-1">
-                          {item.billingCycle ? `${item.billingCycle} access` : 'One-time purchase'}
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center mt-4 sm:mt-0">
-                        <span className="text-white font-medium mr-6">
-                          {formatCurrency(convertPrice(item.price), selectedCurrency)}
-                        </span>
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="p-2 text-gray-400 hover:text-red-400 transition-colors"
-                          aria-label="Remove item"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="p-6 border-t border-gray-700 flex justify-between">
-                  <button
-                    onClick={() => clearCart()}
-                    className="text-indigo-300 hover:text-indigo-200 text-sm font-medium transition-colors"
-                  >
-                    Clear Cart
-                  </button>
-                  
-                  <a
-                    href="/tools"
-                    className="text-amber-400 hover:text-amber-300 text-sm font-medium transition-colors"
-                  >
-                    Continue Shopping
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center">
-                <X className="h-16 w-16 text-indigo-400 mx-auto mb-4" />
-                <h2 className="text-xl font-bold text-white mb-2">Your cart is empty</h2>
-                <p className="text-indigo-300 mb-6">
-                  Looks like you haven't added any tools to your cart yet.
-                </p>
-                <a
-                  href="/tools"
-                  className="inline-flex items-center px-6 py-3 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors"
-                >
-                  Browse Tools
-                </a>
-              </div>
-            )}
+        {cartItems.length === 0 ? (
+          <div className="bg-gray-800 rounded-lg p-8 text-center">
+            <h2 className="text-2xl text-white mb-4">Your cart is empty</h2>
+            <p className="text-gray-300 mb-6">Browse our tools and add some to your cart.</p>
+            <button
+              onClick={() => navigate('/tools')}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md transition-colors"
+            >
+              Browse Tools
+            </button>
           </div>
-          
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden sticky top-24">
-              <div className="p-6 border-b border-gray-700">
-                <h2 className="text-xl font-bold text-white">Order Summary</h2>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <CurrencySelector
-                  selectedCurrency={selectedCurrency}
-                  onCurrencyChange={setSelectedCurrency}
-                />
-                
-                <div className="flex justify-between text-indigo-200">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(convertedSubtotal, selectedCurrency)}</span>
-                </div>
-                <div className="flex justify-between text-indigo-200">
-                  <span>Transaction Fee (2.2%)</span>
-                  <span>{formatCurrency(transactionFee, selectedCurrency)}</span>
-                </div>
-                <div className="flex justify-between text-indigo-200">
-                  <span>GST on Fee (18%)</span>
-                  <span>{formatCurrency(gstOnFee, selectedCurrency)}</span>
-                </div>
-                <div className="border-t border-gray-700 pt-4 flex justify-between font-bold text-white">
-                  <span>Total</span>
-                  <span>{formatCurrency(total, selectedCurrency)}</span>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <div className="bg-gray-800 rounded-lg overflow-hidden">
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                  <h2 className="text-xl font-semibold text-white">Cart Items</h2>
+                  <button
+                    onClick={clearCart}
+                    className="text-red-400 hover:text-red-300 flex items-center"
+                  >
+                    <Trash2 size={16} className="mr-1" />
+                    Clear All
+                  </button>
                 </div>
                 
-                {/* Error message display */}
-                {errorMessage && (
-                  <div className="bg-red-900/50 border border-red-600 text-white p-4 rounded-lg">
-                    <p className="text-sm">{errorMessage}</p>
+                {cartItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 border-b border-gray-700 flex items-center justify-between"
+                  >
+                    <div className="flex-1">
+                      <h3 className="text-white font-medium">{item.name}</h3>
+                      <p className="text-gray-400 text-sm">{item.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-white font-bold">
+                        {formatCurrency(convertPrice(item.price), selectedCurrency)}
+                      </div>
+                      <button
+                        onClick={() => removeFromCart(item.id)}
+                        className="text-red-400 hover:text-red-300 mt-1 inline-flex items-center text-sm"
+                      >
+                        <X size={14} className="mr-1" />
+                        Remove
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
+              </div>
+            </div>
+            
+            <div className="lg:col-span-1">
+              <div className="bg-gray-800 rounded-lg overflow-hidden sticky top-24">
+                <div className="p-4 border-b border-gray-700">
+                  <h2 className="text-xl font-semibold text-white">Order Summary</h2>
+                </div>
                 
-                <div className="flex flex-col gap-4">
+                <div className="p-4">
+                  <div className="mb-2 flex justify-between">
+                    <CurrencySelector
+                      selectedCurrency={selectedCurrency}
+                      onChange={setSelectedCurrency}
+                    />
+                  </div>
+                  
+                  <div className="mb-4 mt-6 space-y-2">
+                    <div className="flex justify-between text-gray-300">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(convertedSubtotal, selectedCurrency)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>Transaction Fee (2.2%)</span>
+                      <span>{formatCurrency(transactionFee, selectedCurrency)}</span>
+                    </div>
+                    <div className="flex justify-between text-gray-300">
+                      <span>GST on Fee (18%)</span>
+                      <span>{formatCurrency(gstOnFee, selectedCurrency)}</span>
+                    </div>
+                    <div className="border-t border-gray-700 pt-2 mt-2 flex justify-between font-bold text-white">
+                      <span>Total</span>
+                      <span>{formatCurrency(total, selectedCurrency)}</span>
+                    </div>
+                  </div>
+                  
+                  {errorMessage && (
+                    <div className="bg-red-900/30 border border-red-800 text-red-300 p-3 rounded-md mb-4 text-sm">
+                      {errorMessage}
+                    </div>
+                  )}
+                  
                   <button
                     onClick={handleCheckout}
-                    disabled={cartItems.length === 0 || isCheckingOut || isPreparingOrder}
-                    className={`w-full flex justify-center items-center py-3 px-4 rounded-lg text-white font-medium transition-all duration-300 ${
-                      cartItems.length === 0 || isCheckingOut || isPreparingOrder
-                        ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-amber-400 to-amber-600 text-gray-900 hover:shadow-lg hover:shadow-amber-500/30'
+                    disabled={isCheckingOut || cartItems.length === 0}
+                    className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center ${
+                      isCheckingOut || cartItems.length === 0
+                        ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                     }`}
                   >
-                    {isCheckingOut || isPreparingOrder ? (
-                      <>
-                        <div className="w-6 h-6 border-2 border-gray-900 border-t-transparent rounded-full animate-spin mr-2"></div>
-                        {isPreparingOrder ? 'Preparing...' : 'Processing...'}
-                      </>
+                    {isCheckingOut ? (
+                      'Processing...'
                     ) : (
                       <>
-                        <CreditCard className="h-5 w-5 mr-2" />
+                        <CreditCard size={18} className="mr-2" />
                         Proceed to Checkout
                       </>
                     )}
                   </button>
-                </div>
-                
-                <div className="mt-6 space-y-3">
-                  <div className="flex items-center text-indigo-300 text-sm">
-                    <Shield className="h-4 w-4 mr-2 text-green-400" />
-                    <span>Secure payment processing</span>
-                  </div>
-                  <div className="flex items-center text-indigo-300 text-sm">
-                    <CheckCircle className="h-4 w-4 mr-2 text-green-400" />
-                    <span>30-day money-back guarantee</span>
+                  
+                  <div className="mt-4 text-center text-sm text-gray-400">
+                    <div className="flex items-center justify-center mb-1">
+                      <Shield size={14} className="mr-1 text-green-400" />
+                      <span>Secure Checkout</span>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <CheckCircle size={14} className="mr-1 text-green-400" />
+                      <span>Satisfaction Guaranteed</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

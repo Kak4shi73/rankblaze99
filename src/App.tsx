@@ -8,7 +8,7 @@ import Signup from './pages/Signup';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Cart from './pages/Cart';
-import PaymentPage from './pages/PaymentPage';
+import Checkout from './pages/Checkout';
 import Tools from './pages/Tools';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
@@ -105,10 +105,10 @@ function App() {
                     <Route path="/tool/:toolId" element={<PlaceholderTool />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route 
-                      path="/payment" 
+                      path="/checkout" 
                       element={
                         <AuthGuard>
-                          <PaymentPage />
+                          <Checkout />
                         </AuthGuard>
                       } 
                     />
