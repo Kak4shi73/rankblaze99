@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import CashfreeCheckout from './CashfreeCheckout';
 
 const Cart = () => {
   const [cart, setCart] = useState([]);
@@ -147,8 +146,14 @@ const Cart = () => {
           <span>₹{totalAmount}</span>
         </div>
         
-        {/* Integrate Cashfree Checkout */}
-        <CashfreeCheckout cart={cart} totalAmount={totalAmount} />
+        {/* Alternative payment option placeholder */}
+        <button 
+          className="checkout-button"
+          onClick={() => navigate('/checkout')}
+          disabled={cart.length === 0}
+        >
+          Proceed to Checkout
+        </button>
       </div>
       
       <style jsx>{`

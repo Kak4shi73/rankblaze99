@@ -76,7 +76,4 @@ declare module '../config/firebase' {
   export const storage: any;
 }
 
-// Add Cashfree global interface
-interface Window {
-  Cashfree: any;
-} 
+// Removed Cashfree global interface 
