@@ -16,20 +16,42 @@ interface ToolCardProps {
 }
 
 const ToolCard = ({ tool }: ToolCardProps) => {
+  // Check if tool object exists
+  if (!tool) {
+    return (
+      <div className="bg-navy-800/90 p-8 rounded-2xl border border-royal-500/20">
+        <p className="text-royal-300">Tool data unavailable</p>
+      </div>
+    );
+  }
+
   const { addToCart, isInCart } = useCart();
   const { showToast } = useToast();
   const [showFeatures, setShowFeatures] = useState(false);
   const Icon = tool.icon;
   const razorpayFormRef = useRef<HTMLFormElement>(null);
 
+  // Safe values
+  const name = tool.name || 'Unnamed Tool';
+  const price = tool.price || 0;
+  const description = tool.description || '';
+  const features = Array.isArray(tool.features) ? tool.features : [];
+  const gradient = tool.gradient || 'from-gray-500 to-gray-600';
+  const id = tool.id || 0;
+
   const handleAddToCart = () => {
-    addToCart({
-      id: tool.id,
-      name: tool.name,
-      price: tool.price,
-      type: 'tool'
-    });
-    showToast(`${tool.name} added to cart`, 'success');
+    try {
+      addToCart({
+        id,
+        name,
+        price,
+        type: 'tool'
+      });
+      showToast(`${name} added to cart`, 'success');
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      showToast('Failed to add item to cart', 'error');
+    }
   };
 
   // Get Razorpay payment button ID based on tool ID
@@ -54,51 +76,67 @@ const ToolCard = ({ tool }: ToolCardProps) => {
 
   // Effect to inject Razorpay script for tools with payment buttons
   useEffect(() => {
-    const buttonId = getRazorpayButtonId(tool.id);
-    
-    if (buttonId && razorpayFormRef.current) {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
-      script.async = true;
-      script.setAttribute('data-payment_button_id', buttonId);
-      razorpayFormRef.current.innerHTML = '';
-      razorpayFormRef.current.appendChild(script);
+    try {
+      const buttonId = getRazorpayButtonId(id);
+      
+      if (buttonId && razorpayFormRef.current) {
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
+        script.async = true;
+        script.setAttribute('data-payment_button_id', buttonId);
+        razorpayFormRef.current.innerHTML = '';
+        razorpayFormRef.current.appendChild(script);
+      }
+    } catch (error) {
+      console.error('Error loading Razorpay script:', error);
     }
-  }, [tool.id]);
+  }, [id]);
 
   // Render Razorpay button for tools with payment buttons or standard cart button for others
   const renderActionButton = () => {
-    const buttonId = getRazorpayButtonId(tool.id);
-    
-    if (buttonId) {
+    try {
+      const buttonId = getRazorpayButtonId(id);
+      
+      if (buttonId) {
+        return (
+          <form ref={razorpayFormRef} className="flex-1"></form>
+        );
+      }
+
       return (
-        <form ref={razorpayFormRef} className="flex-1"></form>
+        <button
+          onClick={handleAddToCart}
+          disabled={isInCart(id)}
+          className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
+            isInCart(id)
+              ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
+              : `bg-gradient-to-r ${gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
+          }`}
+        >
+          {isInCart(id) ? (
+            <>
+              <Check className="h-5 w-5 mr-2" />
+              Added to Cart
+            </>
+          ) : (
+            <>
+              <Plus className="h-5 w-5 mr-2" />
+              Add to Cart
+            </>
+          )}
+        </button>
+      );
+    } catch (error) {
+      console.error('Error rendering action button:', error);
+      return (
+        <button
+          disabled={true}
+          className="flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium bg-gray-700/50 text-gray-400 cursor-not-allowed border border-gray-500/20"
+        >
+          Error loading button
+        </button>
       );
     }
-
-    return (
-      <button
-        onClick={handleAddToCart}
-        disabled={isInCart(tool.id)}
-        className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
-          isInCart(tool.id)
-            ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
-            : `bg-gradient-to-r ${tool.gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
-        }`}
-      >
-        {isInCart(tool.id) ? (
-          <>
-            <Check className="h-5 w-5 mr-2" />
-            Added to Cart
-          </>
-        ) : (
-          <>
-            <Plus className="h-5 w-5 mr-2" />
-            Add to Cart
-          </>
-        )}
-      </button>
-    );
   };
 
   return (
@@ -112,17 +150,17 @@ const ToolCard = ({ tool }: ToolCardProps) => {
           {/* Content */}
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-6">
-              <div className={`p-4 rounded-xl bg-gradient-to-br ${tool.gradient} shadow-lg transform transition-transform duration-300 group-hover:scale-110`}>
-                <Icon className="h-6 w-6 text-white" />
+              <div className={`p-4 rounded-xl bg-gradient-to-br ${gradient} shadow-lg transform transition-transform duration-300 group-hover:scale-110`}>
+                {Icon && typeof Icon === 'function' && <Icon className="h-6 w-6 text-white" />}
               </div>
               <div className="text-2xl font-bold text-royal-100 font-playfair">
-                ₹{tool.price}
+                ₹{price}
                 <span className="text-sm text-royal-300 ml-1">/mo</span>
               </div>
             </div>
 
-            <h3 className="text-2xl font-bold text-royal-100 mb-3 font-playfair">{tool.name}</h3>
-            <p className="text-royal-300 mb-6 line-clamp-2">{tool.description}</p>
+            <h3 className="text-2xl font-bold text-royal-100 mb-3 font-playfair">{name}</h3>
+            <p className="text-royal-300 mb-6 line-clamp-2">{description}</p>
 
             <div className="flex space-x-4">
               <button
@@ -150,16 +188,20 @@ const ToolCard = ({ tool }: ToolCardProps) => {
             </button>
 
             <h3 className="text-2xl font-bold text-royal-100 mb-6 font-playfair">
-              {tool.name} Features
+              {name} Features
             </h3>
             
             <div className="space-y-4">
-              {tool.features.map((feature, index) => (
-                <div key={index} className="flex items-center text-royal-200">
-                  <Check className="h-5 w-5 text-royal-400 mr-3 flex-shrink-0" />
-                  <span>{feature}</span>
-                </div>
-              ))}
+              {features.length > 0 ? (
+                features.map((feature, index) => (
+                  <div key={index} className="flex items-center text-royal-200">
+                    <Check className="h-5 w-5 text-royal-400 mr-3 flex-shrink-0" />
+                    <span>{feature}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-royal-300">No features available for this tool.</p>
+              )}
             </div>
 
             <div className="mt-8 pt-6 border-t border-royal-500/20">

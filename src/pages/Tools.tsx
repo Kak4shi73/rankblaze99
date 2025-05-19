@@ -26,20 +26,35 @@ const Tools = () => {
   const [filteredTools, setFilteredTools] = useState<Tool[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   
+  // Safely access configuration
+  const showTemporaryTools = siteConfig?.showTemporaryTools || false;
+  
   // Use temporary tools or original tools based on config flag
-  const currentTools = siteConfig.showTemporaryTools 
-    ? temporaryToolsData 
-    : toolsData.filter(tool => !tool.hidden);
+  const currentTools = showTemporaryTools 
+    ? (temporaryToolsData || []) 
+    : (toolsData || []).filter(tool => !tool.hidden);
 
-  // Get unique categories
+  // Get unique categories safely
   const categories = ['all', ...new Set(currentTools.map(tool => tool.category || 'uncategorized'))];
 
+  // Filter tools
   useEffect(() => {
     try {
+      if (!currentTools || currentTools.length === 0) {
+        setFilteredTools([]);
+        return;
+      }
+      
       const filtered = currentTools.filter(tool => {
-        const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          tool.description.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
+        // Safe string operations with nullish coalescing
+        const toolName = tool.name || '';
+        const toolDescription = tool.description || '';
+        const toolCategory = tool.category || '';
+        const query = searchQuery || '';
+        
+        const matchesSearch = toolName.toLowerCase().includes(query.toLowerCase()) ||
+                          toolDescription.toLowerCase().includes(query.toLowerCase());
+        const matchesCategory = selectedCategory === 'all' || toolCategory === selectedCategory;
         return matchesSearch && matchesCategory;
       });
       setFilteredTools(filtered);
@@ -49,37 +64,46 @@ const Tools = () => {
     }
   }, [searchQuery, selectedCategory, currentTools]);
 
+  // Set loaded state
   useEffect(() => {
     setIsLoaded(true);
   }, []);
 
   // Function to render temporary tool card
-  const renderTemporaryToolCard = (tool: Tool) => (
-    <Link to={tool.route || ''} key={tool.id} className="group relative rounded-2xl transition-all duration-500 transform hover:-translate-y-2">
-      <div className="relative bg-navy-800/90 backdrop-blur-xl rounded-2xl border border-royal-500/20 p-8 h-full transition-all duration-300 group-hover:bg-navy-800/95 group-hover:border-royal-400/30 group-hover:shadow-lg group-hover:shadow-royal-500/10">
-        <div className="absolute inset-0 bg-gradient-to-br from-royal-500/5 to-royal-700/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+  const renderTemporaryToolCard = (tool: Tool) => {
+    // Safety check for tool object
+    if (!tool) return null;
+    
+    // Extract icon component safely
+    const Icon = tool.icon;
+    
+    return (
+      <Link to={tool.route || ''} key={tool.id} className="group relative rounded-2xl transition-all duration-500 transform hover:-translate-y-2">
+        <div className="relative bg-navy-800/90 backdrop-blur-xl rounded-2xl border border-royal-500/20 p-8 h-full transition-all duration-300 group-hover:bg-navy-800/95 group-hover:border-royal-400/30 group-hover:shadow-lg group-hover:shadow-royal-500/10">
+          <div className="absolute inset-0 bg-gradient-to-br from-royal-500/5 to-royal-700/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-6">
-            <div className={`p-4 rounded-xl bg-gradient-to-br ${tool.gradient} shadow-lg transform transition-transform duration-300 group-hover:scale-110`}>
-              {tool.icon && <tool.icon className="h-6 w-6 text-white" />}
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-6">
+              <div className={`p-4 rounded-xl bg-gradient-to-br ${tool.gradient} shadow-lg transform transition-transform duration-300 group-hover:scale-110`}>
+                {Icon && typeof Icon === 'function' && <Icon className="h-6 w-6 text-white" />}
+              </div>
+              <div className="text-2xl font-bold text-royal-100 font-playfair">
+                ₹{tool.price || 0}
+                <span className="text-sm text-royal-300 ml-1">/mo</span>
+              </div>
             </div>
-            <div className="text-2xl font-bold text-royal-100 font-playfair">
-              ₹{tool.price}
-              <span className="text-sm text-royal-300 ml-1">/mo</span>
-            </div>
+
+            <h3 className="text-2xl font-bold text-royal-100 mb-3 font-playfair">{tool.name || 'Untitled Tool'}</h3>
+            <p className="text-royal-300 mb-6 line-clamp-2">{tool.description || 'No description available'}</p>
+
+            <button className="w-full py-3 px-4 bg-gradient-to-r from-royal-400 to-royal-600 text-navy-950 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-royal-500/25">
+              View Tool
+            </button>
           </div>
-
-          <h3 className="text-2xl font-bold text-royal-100 mb-3 font-playfair">{tool.name}</h3>
-          <p className="text-royal-300 mb-6 line-clamp-2">{tool.description}</p>
-
-          <button className="w-full py-3 px-4 bg-gradient-to-r from-royal-400 to-royal-600 text-navy-950 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-royal-500/25">
-            View Tool
-          </button>
         </div>
-      </div>
-    </Link>
-  );
+      </Link>
+    );
+  };
 
   return (
     <div className="container mx-auto py-16 px-4 max-w-7xl">
@@ -108,7 +132,7 @@ const Tools = () => {
               type="text"
               placeholder="Search tools..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value || '')}
               className="w-full pl-12 pr-4 py-4 bg-navy-800/50 backdrop-blur-xl border border-royal-500/20 rounded-xl text-royal-100 placeholder-royal-300/50 focus:outline-none focus:ring-2 focus:ring-royal-500/50 focus:border-transparent transition-all duration-300"
             />
           </div>
@@ -143,7 +167,7 @@ const Tools = () => {
             className={`animate-fade-in-up ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
             style={{ animationDelay: `${index * 150}ms` }}
           >
-            {siteConfig.showTemporaryTools 
+            {showTemporaryTools 
               ? renderTemporaryToolCard(tool) 
               : <ToolCard tool={tool} />
             }
