@@ -6,26 +6,47 @@ import { temporaryToolsData } from '../data/temporaryTools';
 import { siteConfig } from '../config/site';
 import { Link } from 'react-router-dom';
 
+// Define proper types for tools
+interface Tool {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  features: string[];
+  icon: any;
+  gradient: string;
+  category?: string;
+  hidden?: boolean;
+  route?: string;
+}
+
 const Tools = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [filteredTools, setFilteredTools] = useState<any[]>([]);
+  const [filteredTools, setFilteredTools] = useState<Tool[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   
   // Use temporary tools or original tools based on config flag
-  const currentTools = siteConfig.showTemporaryTools ? temporaryToolsData : toolsData.filter(tool => !tool.hidden);
+  const currentTools = siteConfig.showTemporaryTools 
+    ? temporaryToolsData 
+    : toolsData.filter(tool => !tool.hidden);
 
   // Get unique categories
   const categories = ['all', ...new Set(currentTools.map(tool => tool.category || 'uncategorized'))];
 
   useEffect(() => {
-    const filtered = currentTools.filter(tool => {
-      const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        tool.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
-    setFilteredTools(filtered);
+    try {
+      const filtered = currentTools.filter(tool => {
+        const matchesSearch = tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          tool.description.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
+        return matchesSearch && matchesCategory;
+      });
+      setFilteredTools(filtered);
+    } catch (error) {
+      console.error('Error filtering tools:', error);
+      setFilteredTools([]);
+    }
   }, [searchQuery, selectedCategory, currentTools]);
 
   useEffect(() => {
@@ -33,8 +54,8 @@ const Tools = () => {
   }, []);
 
   // Function to render temporary tool card
-  const renderTemporaryToolCard = (tool: any) => (
-    <Link to={tool.route} key={tool.id} className="group relative rounded-2xl transition-all duration-500 transform hover:-translate-y-2">
+  const renderTemporaryToolCard = (tool: Tool) => (
+    <Link to={tool.route || ''} key={tool.id} className="group relative rounded-2xl transition-all duration-500 transform hover:-translate-y-2">
       <div className="relative bg-navy-800/90 backdrop-blur-xl rounded-2xl border border-royal-500/20 p-8 h-full transition-all duration-300 group-hover:bg-navy-800/95 group-hover:border-royal-400/30 group-hover:shadow-lg group-hover:shadow-royal-500/10">
         <div className="absolute inset-0 bg-gradient-to-br from-royal-500/5 to-royal-700/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
