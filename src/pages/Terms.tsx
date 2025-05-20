@@ -83,6 +83,11 @@ const Terms = () => {
               For questions about these Terms, please contact us at support@rankblaze.in.
             </p>
 
+            <h2 className="text-2xl font-semibold text-white mb-6">11. Business Management</h2>
+            <p className="text-gray-300 mb-6">
+              This Business managed by Aryan Singh
+            </p>
+
             <div className="text-gray-400 mt-10 text-sm">
               Last updated: May 15, 2023
             </div>
