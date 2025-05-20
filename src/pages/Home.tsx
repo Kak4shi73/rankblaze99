@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight } from 'lucide-react';
 import HeroSection from '../components/home/HeroSection';
 import ToolsSlideshow from '../components/home/ToolsSlideshow';
-import Testimonials from '../components/home/Testimonials';
+// import Testimonials from '../components/home/Testimonials';
 import HowItWorks from '../components/home/HowItWorks';
 import { useAutoToasts } from '../utils/autoToasts';
 
@@ -21,7 +21,7 @@ const Home = () => {
       <HeroSection />
       <HowItWorks />
       <ToolsSlideshow />
-      <Testimonials />
+      {/* Testimonials section removed */}
       
       {/* CTA Section */}
       <section className="py-12 sm:py-16 md:py-20 px-4 sm:px-6 md:px-10 bg-gradient-to-r from-indigo-900 to-purple-900 overflow-hidden">
