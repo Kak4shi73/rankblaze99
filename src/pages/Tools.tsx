@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, Plus, Check } from 'lucide-react';
 import { toolsData } from '../data/tools';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +36,8 @@ const Tools = () => {
   const allTools = toolsData ? toolsData.filter(tool => !toolsToHide.includes(tool.name)) : [];
   const { addToCart, isInCart } = useCart();
   const { showToast } = useToast();
-  const { isAuthenticated } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   
   // Map tool names to their route IDs for the tool access page
   const toolRouteMap: Record<string, string> = {
@@ -67,8 +68,15 @@ const Tools = () => {
   };
   
   const handleViewDetails = (tool: Tool) => {
-    if (!isAuthenticated) {
+    const toolRouteId = toolRouteMap[tool.name] || tool.id.toString();
+    
+    if (user) {
+      // User is authenticated, navigate to tool access page
+      navigate(`/tool-access/${toolRouteId}`);
+    } else {
+      // User is not authenticated, show toast and navigate to login
       showToast('Please sign in to view tool details', 'info');
+      navigate('/login');
     }
   };
   
@@ -88,7 +96,6 @@ const Tools = () => {
         {allTools.map((tool) => {
           const stringId = tool.id.toString();
           const inCart = isInCart(stringId);
-          const toolRouteId = toolRouteMap[tool.name] || tool.id.toString();
           
           return (
             <div key={tool.id} className="bg-navy-800/90 p-6 rounded-xl border border-royal-500/20 hover:border-royal-400/40 transition-all duration-300 hover:shadow-lg hover:shadow-royal-500/10">
@@ -106,22 +113,12 @@ const Tools = () => {
               <p className="text-royal-300 text-sm mb-4 line-clamp-2">{tool.description}</p>
               
               <div className="flex space-x-3">
-                {isAuthenticated ? (
-                  <Link 
-                    to={`/tool-access/${toolRouteId}`} 
-                    className="flex-1 py-2 px-4 bg-navy-700 text-royal-200 rounded-lg hover:bg-navy-600 transition-colors border border-royal-500/20 text-center"
-                  >
-                    View Details
-                  </Link>
-                ) : (
-                  <Link 
-                    to="/login" 
-                    onClick={() => handleViewDetails(tool)}
-                    className="flex-1 py-2 px-4 bg-navy-700 text-royal-200 rounded-lg hover:bg-navy-600 transition-colors border border-royal-500/20 text-center"
-                  >
-                    View Details
-                  </Link>
-                )}
+                <button 
+                  onClick={() => handleViewDetails(tool)}
+                  className="flex-1 py-2 px-4 bg-navy-700 text-royal-200 rounded-lg hover:bg-navy-600 transition-colors border border-royal-500/20 text-center"
+                >
+                  View Details
+                </button>
                 <button 
                   onClick={() => handleAddToCart(tool)}
                   disabled={inCart}
