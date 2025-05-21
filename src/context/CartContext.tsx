@@ -22,6 +22,7 @@ interface CartContextType {
   checkout: () => void;
   isCartOpen: boolean;
   toggleCart: () => void;
+  isInCart: (itemId: string) => boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -101,6 +102,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     navigate('/checkout');
   };
 
+  const isInCart = (itemId: string) => {
+    return cartItems.some(item => item.id === itemId);
+  };
+
   return (
     <CartContext.Provider value={{
       cartItems,
@@ -111,7 +116,8 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       getTotalPrice,
       checkout,
       isCartOpen,
-      toggleCart
+      toggleCart,
+      isInCart
     }}>
       {children}
     </CartContext.Provider>

@@ -10,6 +10,7 @@ export const siteConfig = {
   logoUrl: '/vite.svg',
   author: 'RANKBLAZE Team',
   showTemporaryTools: false,
+  displayHiddenTools: true,
   social: {
     twitter: '@rankblaze',
     facebook: 'rankblaze',

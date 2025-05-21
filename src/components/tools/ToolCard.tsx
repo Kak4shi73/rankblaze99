@@ -16,8 +16,11 @@ interface ToolCardProps {
 }
 
 const ToolCard = ({ tool }: ToolCardProps) => {
+  console.log("ToolCard rendering with tool:", tool);
+  
   // Check if tool object exists
   if (!tool) {
+    console.error("Tool object is undefined or null");
     return (
       <div className="bg-navy-800/90 p-8 rounded-2xl border border-royal-500/20">
         <p className="text-royal-300">Tool data unavailable</p>
@@ -38,9 +41,12 @@ const ToolCard = ({ tool }: ToolCardProps) => {
   const gradient = tool.gradient || 'from-gray-500 to-gray-600';
   const id = tool.id || 0;
   const stringId = id.toString();
+  
+  console.log("Tool ID:", id, "String ID:", stringId);
 
   const handleAddToCart = () => {
     try {
+      console.log("Adding to cart:", { id: stringId, name, price });
       addToCart({
         id: stringId,
         name,
@@ -54,6 +60,10 @@ const ToolCard = ({ tool }: ToolCardProps) => {
       showToast('Failed to add item to cart', 'error');
     }
   };
+
+  // Check if the item is already in cart
+  const inCart = isInCart(stringId);
+  console.log("Is in cart:", inCart);
 
   return (
     <>
@@ -88,14 +98,14 @@ const ToolCard = ({ tool }: ToolCardProps) => {
 
               <button
                 onClick={handleAddToCart}
-                disabled={isInCart(stringId)}
+                disabled={inCart}
                 className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
-                  isInCart(stringId)
+                  inCart
                     ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
                     : `bg-gradient-to-r ${gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
                 }`}
               >
-                {isInCart(stringId) ? (
+                {inCart ? (
                   <>
                     <Check className="h-5 w-5 mr-2" />
                     Added to Cart
