@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Check, X, ExternalLink } from 'lucide-react';
+import * as React from 'react';
+import { Plus, Check, X } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -27,9 +27,8 @@ const ToolCard = ({ tool }: ToolCardProps) => {
 
   const { addToCart, isInCart } = useCart();
   const { showToast } = useToast();
-  const [showFeatures, setShowFeatures] = useState(false);
+  const [showFeatures, setShowFeatures] = React.useState(false);
   const Icon = tool.icon;
-  const razorpayFormRef = useRef<HTMLFormElement>(null);
 
   // Safe values
   const name = tool.name || 'Unnamed Tool';
@@ -51,91 +50,6 @@ const ToolCard = ({ tool }: ToolCardProps) => {
     } catch (error) {
       console.error('Error adding to cart:', error);
       showToast('Failed to add item to cart', 'error');
-    }
-  };
-
-  // Get Razorpay payment button ID based on tool ID
-  const getRazorpayButtonId = (toolId: number): string | null => {
-    const buttonIds: Record<number, string> = {
-      1: 'pl_QW2NErdMtUUfqa', // ChatGPT Plus
-      2: 'pl_QW2ktda91DA0p1', // Envato Elements
-      3: 'pl_QW2yxpP0F1fwIb', // Canva Pro
-      4: 'pl_QW30xbYuzS6F1W', // Storyblocks
-      5: 'pl_QW35VHxq04Og6k', // SEMrush
-      6: 'pl_QW37VbzXkt9KcX', // Grammarly
-      7: 'pl_QW39I83HgUpmYX', // Netflix Premium
-      8: 'pl_QW3BXmf2ucsRj6', // Spotify Premium
-      9: 'pl_QW3DHVp6U8BaiU', // YouTube Premium
-      10: 'pl_QW3DHVp6U8BaiU', // Helium10
-      19: 'pl_QW3T3PwRatrXTn', // Stealth Writer
-      20: 'pl_QW3UWkeN1bY5Q5', // Hix Bypass
-    };
-
-    return buttonIds[toolId] || null;
-  };
-
-  // Effect to inject Razorpay script for tools with payment buttons
-  useEffect(() => {
-    try {
-      const buttonId = getRazorpayButtonId(id);
-      
-      if (buttonId && razorpayFormRef.current) {
-        const script = document.createElement('script');
-        script.src = 'https://checkout.razorpay.com/v1/payment-button.js';
-        script.async = true;
-        script.setAttribute('data-payment_button_id', buttonId);
-        razorpayFormRef.current.innerHTML = '';
-        razorpayFormRef.current.appendChild(script);
-      }
-    } catch (error) {
-      console.error('Error loading Razorpay script:', error);
-    }
-  }, [id]);
-
-  // Render Razorpay button for tools with payment buttons or standard cart button for others
-  const renderActionButton = () => {
-    try {
-      const buttonId = getRazorpayButtonId(id);
-      
-      if (buttonId) {
-        return (
-          <form ref={razorpayFormRef} className="flex-1"></form>
-        );
-      }
-
-      return (
-        <button
-          onClick={handleAddToCart}
-          disabled={isInCart(id)}
-          className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
-            isInCart(id)
-              ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
-              : `bg-gradient-to-r ${gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
-          }`}
-        >
-          {isInCart(id) ? (
-            <>
-              <Check className="h-5 w-5 mr-2" />
-              Added to Cart
-            </>
-          ) : (
-            <>
-              <Plus className="h-5 w-5 mr-2" />
-              Add to Cart
-            </>
-          )}
-        </button>
-      );
-    } catch (error) {
-      console.error('Error rendering action button:', error);
-      return (
-        <button
-          disabled={true}
-          className="flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium bg-gray-700/50 text-gray-400 cursor-not-allowed border border-gray-500/20"
-        >
-          Error loading button
-        </button>
-      );
     }
   };
 
@@ -170,7 +84,27 @@ const ToolCard = ({ tool }: ToolCardProps) => {
                 View Features
               </button>
 
-              {renderActionButton()}
+              <button
+                onClick={handleAddToCart}
+                disabled={isInCart(id)}
+                className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
+                  isInCart(id)
+                    ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
+                    : `bg-gradient-to-r ${gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
+                }`}
+              >
+                {isInCart(id) ? (
+                  <>
+                    <Check className="h-5 w-5 mr-2" />
+                    Added to Cart
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-5 w-5 mr-2" />
+                    Add to Cart
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
