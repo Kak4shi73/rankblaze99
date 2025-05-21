@@ -134,7 +134,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem('userLoginTime', Date.now().toString());
       
       showToast('Successfully logged in', 'success');
-      navigate('/dashboard');
+      // Let the Login component handle navigation based on redirect parameter
     } catch (error: any) {
       const errorMessage = 
         error.code === 'auth/invalid-credential' ? 'Invalid email or password' : 
@@ -178,7 +178,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem('userLoginTime', Date.now().toString());
       
       showToast('Successfully logged in with Google', 'success');
-      navigate('/dashboard');
+      // Let the Login component handle navigation based on redirect parameter
     } catch (error: any) {
       // Check for user cancellation
       if (error.code === 'auth/popup-closed-by-user') {

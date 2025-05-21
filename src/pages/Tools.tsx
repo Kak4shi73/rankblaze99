@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, Plus, Check } from 'lucide-react';
 import { toolsData } from '../data/tools';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -36,18 +36,20 @@ const Tools = () => {
   const allTools = toolsData ? toolsData.filter(tool => !toolsToHide.includes(tool.name)) : [];
   const { addToCart, isInCart } = useCart();
   const { showToast } = useToast();
-  const { user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
-  // Map tool names to their route IDs for the tool access page
+  // Map tool names to their exact tool IDs for the tool access page
+  // These IDs must match the keys in TOOL_INFO in ToolAccess.tsx
   const toolRouteMap: Record<string, string> = {
     'Envato Elements': 'envato_elements',
     'Storyblocks': 'storyblocks',
     'SEMrush': 'semrush',
-    'Helium10': 'helium10',
+    'Helium10': 'helium10', // Make sure this ID exists in ToolAccess component
     'Writesonic': 'stealth_writer',
-    'Leonardo.ai': 'leonardo_ai',
-    // Add more mappings as needed
+    'Leonardo.ai': 'leonardo_ai', // Make sure this ID exists in ToolAccess component
+    'Coursera': 'coursera', // Make sure this ID exists in ToolAccess component
+    'Skillshare': 'skillshare' // Make sure this ID exists in ToolAccess component
   };
   
   const handleAddToCart = (tool: Tool) => {
@@ -67,16 +69,20 @@ const Tools = () => {
     }
   };
   
-  const handleViewDetails = (tool: Tool) => {
-    const toolRouteId = toolRouteMap[tool.name] || tool.id.toString();
+  const handleViewDetails = (e: React.MouseEvent, tool: Tool) => {
+    e.preventDefault(); // Prevent default button behavior
     
-    if (user) {
+    // Use the mapping if available, otherwise use ID with prefix "tool_"
+    const toolRouteId = toolRouteMap[tool.name] || `tool_${tool.id}`;
+    
+    if (isAuthenticated) {
       // User is authenticated, navigate to tool access page
       navigate(`/tool-access/${toolRouteId}`);
     } else {
       // User is not authenticated, show toast and navigate to login
       showToast('Please sign in to view tool details', 'info');
-      navigate('/login');
+      // Save the intended destination as a URL parameter
+      navigate(`/login?redirect=/tool-access/${toolRouteId}`);
     }
   };
   
@@ -114,7 +120,7 @@ const Tools = () => {
               
               <div className="flex space-x-3">
                 <button 
-                  onClick={() => handleViewDetails(tool)}
+                  onClick={(e) => handleViewDetails(e, tool)}
                   className="flex-1 py-2 px-4 bg-navy-700 text-royal-200 rounded-lg hover:bg-navy-600 transition-colors border border-royal-500/20 text-center"
                 >
                   View Details

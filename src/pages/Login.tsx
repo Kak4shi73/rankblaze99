@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { auth } from '../config/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -13,8 +13,13 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, loginWithGoogle } = useAuth();
   const { showToast } = useToast();
+
+  // Extract redirect URL from query parameters if present
+  const queryParams = new URLSearchParams(location.search);
+  const redirectUrl = queryParams.get('redirect') || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +33,9 @@ const Login = () => {
     
     try {
       await login(email, password);
+      // The default navigation to /dashboard is in the AuthContext
+      // We need to override it with our redirect
+      navigate(redirectUrl);
     } catch (error: any) {
       showToast(error.message || 'Invalid email or password', 'error');
     } finally {
@@ -39,7 +47,10 @@ const Login = () => {
     setIsLoading(true);
     try {
       await loginWithGoogle();
-    } catch (error) {
+      // The default navigation to /dashboard is in the AuthContext
+      // We need to override it with our redirect
+      navigate(redirectUrl);
+    } catch (error: any) {
       // Error is handled in the context
     } finally {
       setIsLoading(false);
