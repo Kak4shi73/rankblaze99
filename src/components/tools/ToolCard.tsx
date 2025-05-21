@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React from 'react';
 import { Plus, Check, X } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
@@ -37,14 +37,16 @@ const ToolCard = ({ tool }: ToolCardProps) => {
   const features = Array.isArray(tool.features) ? tool.features : [];
   const gradient = tool.gradient || 'from-gray-500 to-gray-600';
   const id = tool.id || 0;
+  const stringId = id.toString();
 
   const handleAddToCart = () => {
     try {
       addToCart({
-        id,
+        id: stringId,
         name,
         price,
-        type: 'tool'
+        type: 'tool',
+        quantity: 1
       });
       showToast(`${name} added to cart`, 'success');
     } catch (error) {
@@ -86,14 +88,14 @@ const ToolCard = ({ tool }: ToolCardProps) => {
 
               <button
                 onClick={handleAddToCart}
-                disabled={isInCart(id)}
+                disabled={isInCart(stringId)}
                 className={`flex-1 flex items-center justify-center py-3 px-4 rounded-xl font-medium transition-all duration-300 ${
-                  isInCart(id)
+                  isInCart(stringId)
                     ? 'bg-green-900/50 text-green-400 cursor-not-allowed border border-green-500/20'
                     : `bg-gradient-to-r ${gradient} text-white shadow-lg hover:shadow-royal-500/25 transform hover:scale-105`
                 }`}
               >
-                {isInCart(id) ? (
+                {isInCart(stringId) ? (
                   <>
                     <Check className="h-5 w-5 mr-2" />
                     Added to Cart
