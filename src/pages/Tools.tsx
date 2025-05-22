@@ -86,7 +86,17 @@ const Tools = () => {
               </div>
               
               <h3 className="text-xl font-bold text-royal-100 mb-2">{tool.name}</h3>
-              <p className="text-royal-300 text-sm mb-4 line-clamp-2">{tool.description}</p>
+              <p className="text-royal-300 text-sm mb-2 line-clamp-2">{tool.description}</p>
+              
+              {/* Display 2-3 features as bullet points */}
+              <ul className="mb-4 text-xs text-royal-200">
+                {tool.features && tool.features.slice(0, 3).map((feature, index) => (
+                  <li key={index} className="flex items-center mb-1">
+                    <span className="mr-2 text-royal-400">•</span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
               
               <div className="flex space-x-3">
                 <button 
