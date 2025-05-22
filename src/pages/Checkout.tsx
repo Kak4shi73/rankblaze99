@@ -40,27 +40,60 @@ const Checkout = () => {
       if (response.success && response.payload && response.checksum) {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
+        sessionStorage.setItem('merchantTransactionId', response.merchantTransactionId);
         
-        // Create form and submit to PhonePe
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        // Instead of form submission, create a popup window with proper attributes
+        const paymentUrl = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
         
-        const payloadInput = document.createElement('input');
-        payloadInput.type = 'hidden';
-        payloadInput.name = 'request';
-        payloadInput.value = response.payload;
+        // Create a form for the popup window
+        const formHtml = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Processing Payment...</title>
+            <script>
+              window.onload = function() {
+                document.getElementById('paymentForm').submit();
+              }
+            </script>
+          </head>
+          <body>
+            <form id="paymentForm" method="POST" action="${paymentUrl}">
+              <input type="hidden" name="request" value="${response.payload}">
+              <input type="hidden" name="X-VERIFY" value="${response.checksum}">
+            </form>
+            <div style="text-align:center; margin-top:20px;">
+              <p>Processing your payment...</p>
+            </div>
+          </body>
+          </html>
+        `;
         
-        const checksumInput = document.createElement('input');
-        checksumInput.type = 'hidden';
-        checksumInput.name = 'X-VERIFY';
-        checksumInput.value = response.checksum;
+        // Create a blob from the HTML content
+        const blob = new Blob([formHtml], { type: 'text/html' });
+        const blobUrl = URL.createObjectURL(blob);
         
-        form.appendChild(payloadInput);
-        form.appendChild(checksumInput);
+        // Open the payment in a new window with proper attributes
+        const paymentWindow = window.open(
+          blobUrl,
+          'phonepePayment',
+          'width=800,height=600,noopener,noreferrer'
+        );
         
-        document.body.appendChild(form);
-        form.submit();
+        if (!paymentWindow) {
+          throw new Error('Payment popup was blocked. Please allow popups for this website.');
+        }
+        
+        // Start monitoring payment status
+        if (response.merchantTransactionId) {
+          monitorPaymentStatus(response.merchantTransactionId);
+        }
+        
+        // Clean up the blob URL when done
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 60000); // Clean up after 1 minute
+        
       } else {
         throw new Error(response.error || 'Payment initialization failed');
       }
@@ -69,6 +102,46 @@ const Checkout = () => {
       setErrorMessage(error instanceof Error ? error.message : 'An error occurred during payment initialization');
       console.error('Payment error:', error);
     }
+  };
+  
+  // Function to monitor payment status
+  const monitorPaymentStatus = async (merchantTransactionId: string) => {
+    let attempts = 0;
+    const maxAttempts = 20; // Check for up to ~1 minute (20 * 3s)
+    
+    const checkStatus = async () => {
+      try {
+        if (attempts >= maxAttempts) {
+          setIsProcessing(false);
+          setErrorMessage('Payment verification timed out. Please check your payment status in your account.');
+          return;
+        }
+        
+        attempts++;
+        
+        const { initializePhonePePayment, verifyPaymentStatus } = await import('../utils/payment');
+        const isComplete = await verifyPaymentStatus(merchantTransactionId);
+        
+        if (isComplete) {
+          // Payment successful, redirect to thank you page
+          clearCart();
+          navigate('/thank-you');
+        } else if (attempts < maxAttempts) {
+          // Check again after 3 seconds
+          setTimeout(checkStatus, 3000);
+        } else {
+          setIsProcessing(false);
+          setErrorMessage('Payment verification timed out. Please check your payment status in your account.');
+        }
+      } catch (error) {
+        console.error('Error checking payment status:', error);
+        setIsProcessing(false);
+        setErrorMessage('Error verifying payment. Please check your payment status in your account.');
+      }
+    };
+    
+    // Start checking
+    setTimeout(checkStatus, 5000); // First check after 5 seconds
   };
 
   const handleGoBack = () => {
