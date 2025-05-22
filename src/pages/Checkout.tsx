@@ -1,20 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { initializePhonePePayment } from '../utils/payment';
-import { CreditCard, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
+// Import these specific icons directly to avoid issues
+import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
+import ShoppingBag from 'lucide-react/dist/esm/icons/shopping-bag';
 
 const Checkout = () => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { cartItems, getTotalPrice, clearCart } = useCart();
   const totalAmount = getTotalPrice();
 
   // Redirect if no user or empty cart
-  useEffect(() => {
+  React.useEffect(() => {
     if (!user) {
       navigate('/login');
     } else if (!cartItems.length) {
