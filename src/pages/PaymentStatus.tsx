@@ -1,20 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import * as React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { verifyPaymentStatus } from '../utils/payment';
 import { Check, X } from 'lucide-react';
-import { firestore } from '../config/firebase';
-import { updateDoc, doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { firestore, db } from '../config/firebase';
+import { updateDoc, doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, get } from 'firebase/database';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
+
+interface Tool {
+  id: string;
+  name: string;
+  price: number;
+  quantity?: number;
+}
 
 const PaymentStatus = () => {
-  const [status, setStatus] = useState<'loading' | 'success' | 'failed'>('loading');
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [tools, setTools] = useState<any[]>([]);
+  const [status, setStatus] = React.useState<'loading' | 'success' | 'failed'>('loading');
+  const [orderId, setOrderId] = React.useState<string | null>(null);
+  const [tools, setTools] = React.useState<Tool[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const { clearCart } = useCart();
 
-  useEffect(() => {
+  React.useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const merchantTransactionId = queryParams.get('merchantTransactionId');
     
@@ -27,7 +37,7 @@ const PaymentStatus = () => {
 
     // Retrieve pending cart items from session storage
     const pendingCartItemsJson = sessionStorage.getItem('pendingCartItems');
-    let pendingCartItems: any[] = [];
+    let pendingCartItems: Tool[] = [];
     
     if (pendingCartItemsJson) {
       try {
@@ -38,38 +48,31 @@ const PaymentStatus = () => {
       }
     }
 
+    // Clear the cart since payment is being processed
+    clearCart();
+
     const checkStatus = async () => {
       try {
-        // Verify payment with the backend
+        // First check directly from Realtime Database for faster response
+        const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
+        const snapshot = await get(transactionRef);
+        
+        if (snapshot.exists()) {
+          const transaction = snapshot.val();
+          if (transaction.status === 'completed') {
+            handleSuccessfulPayment(merchantTransactionId, pendingCartItems);
+            return;
+          } else if (transaction.status === 'failed') {
+            setStatus('failed');
+            return;
+          }
+        }
+        
+        // If not found in Realtime DB, verify with the backend API
         const isSuccess = await verifyPaymentStatus(merchantTransactionId);
         
         if (isSuccess) {
-          setStatus('success');
-          
-          // Clear the cart items from session storage
-          sessionStorage.removeItem('pendingCartItems');
-          
-          // Update user's profile if needed
-          if (user && pendingCartItems.length > 0) {
-            try {
-              // Create a record of the successful purchase
-              const purchaseRecord = {
-                userId: user.uid,
-                orderId: merchantTransactionId,
-                purchasedAt: serverTimestamp(),
-                tools: pendingCartItems.map(item => ({
-                  id: item.id,
-                  name: item.name,
-                  price: item.price
-                }))
-              };
-              
-              // Add to user's purchase history
-              await addDoc(collection(firestore, 'user_purchases'), purchaseRecord);
-            } catch (error) {
-              console.error('Error updating user profile:', error);
-            }
-          }
+          handleSuccessfulPayment(merchantTransactionId, pendingCartItems);
         } else {
           setStatus('failed');
         }
@@ -79,8 +82,38 @@ const PaymentStatus = () => {
       }
     };
 
+    const handleSuccessfulPayment = async (transactionId: string, items: Tool[]) => {
+      setStatus('success');
+      
+      // Clear the cart items from session storage
+      sessionStorage.removeItem('pendingCartItems');
+      
+      // Update user's profile if needed
+      if (user && items.length > 0) {
+        try {
+          // Create a record of the successful purchase
+          const purchaseRecord = {
+            userId: user.uid,
+            orderId: transactionId,
+            purchasedAt: serverTimestamp(),
+            tools: items.map(item => ({
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity || 1
+            }))
+          };
+          
+          // Add to user's purchase history
+          await addDoc(collection(firestore, 'user_purchases'), purchaseRecord);
+        } catch (error) {
+          console.error('Error updating user profile:', error);
+        }
+      }
+    };
+
     checkStatus();
-  }, [location.search, user]);
+  }, [location.search, user, clearCart]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">

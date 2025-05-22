@@ -23,27 +23,21 @@ const Checkout = () => {
   }, [user, cartItems, navigate]);
 
   const handlePlaceOrder = async () => {
-    if (!user || !cartItems.length) {
-      navigate('/cart');
-      return;
-    }
-
     setIsProcessing(true);
     setErrorMessage(null);
-
+    
     try {
       // Get the first tool ID from cart (we'll associate the payment with this tool)
-      // In case of multiple tools, we'll handle the assignment in the backend
       const primaryToolId = cartItems[0].id;
 
-      // Initialize payment using the total cart amount
+      // Initialize PhonePe payment
       const response = await initializePhonePePayment(
         totalAmount,
-        user.uid,
+        user?.uid || '',
         primaryToolId
       );
 
-      if (response.success) {
+      if (response.success && response.payload && response.checksum) {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         
@@ -56,113 +50,153 @@ const Checkout = () => {
         payloadInput.type = 'hidden';
         payloadInput.name = 'request';
         payloadInput.value = response.payload;
-
+        
         const checksumInput = document.createElement('input');
         checksumInput.type = 'hidden';
-        checksumInput.name = 'checksum';
+        checksumInput.name = 'X-VERIFY';
         checksumInput.value = response.checksum;
-
+        
         form.appendChild(payloadInput);
         form.appendChild(checksumInput);
+        
         document.body.appendChild(form);
         form.submit();
       } else {
-        throw new Error('Payment initialization failed');
+        throw new Error(response.error || 'Payment initialization failed');
       }
     } catch (error) {
-      console.error('Payment error:', error);
       setIsProcessing(false);
-      setErrorMessage(error instanceof Error ? error.message : 'Payment initialization failed');
+      setErrorMessage(error instanceof Error ? error.message : 'An error occurred during payment initialization');
+      console.error('Payment error:', error);
     }
   };
 
-  if (!user || !cartItems.length) {
-    return null; // Will be redirected by useEffect
-  }
+  const handleGoBack = () => {
+    navigate('/cart');
+  };
 
   return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto px-4 py-8">
-        <button
-          onClick={() => navigate('/cart')}
-          className="flex items-center text-indigo-300 hover:text-indigo-200 mb-8"
+    <div className="min-h-screen pt-12 pb-20">
+      <div className="max-w-4xl mx-auto px-4">
+        <button 
+          onClick={handleGoBack}
+          className="flex items-center text-indigo-400 hover:text-indigo-300 mb-8 transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 mr-2" />
+          <ArrowLeft size={18} className="mr-2" />
           Back to Cart
         </button>
-
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-gray-800 rounded-lg p-6 mb-8 shadow-lg">
-            <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
-            
-            {cartItems.map((item) => (
-              <div key={item.id} className="flex justify-between py-3 border-b border-gray-700">
-                <div>
-                  <h3 className="text-white">{item.name}</h3>
-                  <p className="text-gray-400">Quantity: {item.quantity || 1}</p>
-                </div>
-                <div className="text-white font-bold">₹{item.price * (item.quantity || 1)}</div>
-              </div>
-            ))}
-
-            <div className="mt-6 space-y-2">
-              <div className="flex justify-between text-gray-300">
-                <span>Subtotal:</span>
-                <span>₹{totalAmount}</span>
-              </div>
-              <div className="flex justify-between text-gray-300">
-                <span>Tax:</span>
-                <span>₹0</span>
-              </div>
-              <div className="flex justify-between font-bold text-white pt-2 border-t border-gray-700">
-                <span>Total:</span>
-                <span>₹{totalAmount}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
-            <h2 className="text-2xl font-bold text-white mb-6">Payment Information</h2>
-            
-            {errorMessage && (
-              <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-md mb-6">
-                {errorMessage}
-              </div>
-            )}
-            
-            <div className="space-y-6">
-              <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-700">
-                <div className="flex items-center">
-                  <div className="bg-indigo-600 p-2 rounded-md mr-3">
-                    <ShoppingBag className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium">Secure Payment</h3>
-                    <p className="text-gray-400 text-sm">Your payment information is secure</p>
+        
+        <div className="bg-gray-800 rounded-xl p-6 md:p-8 shadow-xl">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-8">Checkout</h1>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <div className="bg-gray-700/50 rounded-lg p-6 mb-6">
+                <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                  <ShoppingBag size={20} className="mr-2 text-indigo-400" />
+                  Order Summary
+                </h2>
+                
+                <div className="space-y-4">
+                  {cartItems.map((item) => (
+                    <div key={item.id} className="flex justify-between border-b border-gray-600/50 pb-3">
+                      <div>
+                        <p className="text-white font-medium">{item.name}</p>
+                        <p className="text-gray-400 text-sm">{item.description}</p>
+                      </div>
+                      <p className="text-indigo-300 font-medium">₹{item.price}</p>
+                    </div>
+                  ))}
+                  
+                  <div className="flex justify-between pt-2">
+                    <p className="text-white font-bold">Total</p>
+                    <p className="text-indigo-300 font-bold">₹{totalAmount}</p>
                   </div>
                 </div>
               </div>
               
-              <button
-                onClick={handlePlaceOrder}
-                disabled={isProcessing}
-                className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center
-                  ${isProcessing 
-                    ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed' 
-                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
-              >
-                {isProcessing ? (
-                  <div className="flex items-center">
-                    <div className="w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Processing...
+              <div className="bg-gray-700/50 rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+                  <CreditCard size={20} className="mr-2 text-indigo-400" />
+                  Payment Method
+                </h2>
+                
+                <div className="flex items-center p-4 bg-gray-800 rounded-lg border border-gray-600">
+                  <div className="w-12 h-12 flex items-center justify-center bg-white rounded-md mr-4">
+                    <img 
+                      src="/images/phonepe-logo.png" 
+                      alt="PhonePe" 
+                      className="h-8 w-auto"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "https://www.phonepe.com/webstatic/static/favicon-32x32-9c2f9f1e.png";
+                      }}
+                    />
                   </div>
-                ) : (
-                  <div className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Pay with PhonePe ₹{totalAmount}
+                  <div>
+                    <p className="text-white font-medium">PhonePe</p>
+                    <p className="text-gray-400 text-sm">UPI, Cards, Wallets</p>
+                  </div>
+                </div>
+                
+                {errorMessage && (
+                  <div className="mt-4 p-3 bg-red-900/30 border border-red-800 text-red-200 rounded-lg">
+                    {errorMessage}
                   </div>
                 )}
-              </button>
+              </div>
+            </div>
+            
+            <div className="lg:col-span-1">
+              <div className="bg-gray-700/50 rounded-lg p-6 sticky top-24">
+                <h2 className="text-xl font-semibold text-white mb-4">Payment Summary</h2>
+                
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between">
+                    <p className="text-gray-300">Subtotal</p>
+                    <p className="text-white">₹{totalAmount}</p>
+                  </div>
+                  <div className="flex justify-between">
+                    <p className="text-gray-300">Tax</p>
+                    <p className="text-white">₹0</p>
+                  </div>
+                  <div className="border-t border-gray-600 my-2 pt-2"></div>
+                  <div className="flex justify-between">
+                    <p className="text-white font-bold">Total</p>
+                    <p className="text-indigo-300 font-bold">₹{totalAmount}</p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handlePlaceOrder}
+                  disabled={isProcessing}
+                  className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-colors ${
+                    isProcessing 
+                      ? 'bg-gray-600 cursor-not-allowed' 
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  {isProcessing ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Processing...
+                    </div>
+                  ) : (
+                    'Pay Now'
+                  )}
+                </button>
+                
+                <p className="text-gray-400 text-sm text-center mt-4">
+                  By clicking "Pay Now", you agree to our{' '}
+                  <a href="/terms" className="text-indigo-400 hover:text-indigo-300">
+                    Terms
+                  </a>{' '}
+                  and{' '}
+                  <a href="/privacy" className="text-indigo-400 hover:text-indigo-300">
+                    Privacy Policy
+                  </a>
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -259,17 +259,32 @@ export const getToolSession = functions.https.onCall(
 // Set up express app for API endpoints
 const app = express();
 
+// Configure CORS with specific origins
+const corsOptions = {
+  origin: [
+    'https://rankblaze.in',
+    'https://www.rankblaze.in',
+    'https://rankblaze-138f7.web.app',
+    'https://rankblaze-138f7.firebaseapp.com',
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true
+};
+
 // Middleware
-app.use(cors({ origin: true }));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // PhonePe configuration
 const PHONEPE_CONFIG = {
-  merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'RANKBLAZEONLINE',
+  merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'SU2505221605010380976302',
   saltKey: functions.config().phonepe?.salt_key || process.env.PHONEPE_SALT_KEY || 'c6c71ce3-b5cb-499e-a8fd-dc55208daa13',
   saltIndex: functions.config().phonepe?.salt_index || process.env.PHONEPE_SALT_INDEX || '1',
   environment: functions.config().phonepe?.env || process.env.PHONEPE_ENV || 'PROD',
-  callbackUrl: functions.config().phonepe?.callback_url || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze-138f7.web.app/payment-status'
+  callbackUrl: functions.config().phonepe?.callback_url || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze.in/payment-status'
 };
 
 // Helper function to generate SHA256 checksum
