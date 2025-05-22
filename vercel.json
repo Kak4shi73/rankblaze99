@@ -46,5 +46,11 @@
         }
       ]
     }
-  ]
+  ],
+  "env": {
+    "PHONEPE_MERCHANT_ID": "MERCHANTUAT",
+    "PHONEPE_SALT_KEY": "c6c71ce3-b5cb-499e-a8fd-dc55208daa13",
+    "PHONEPE_SALT_INDEX": "1",
+    "PHONEPE_ENV": "UAT"
+  }
 }
