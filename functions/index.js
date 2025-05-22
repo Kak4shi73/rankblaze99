@@ -2,6 +2,7 @@ const functions = require("firebase-functions");
 const express = require("express");
 const cors = require("cors");
 const admin = require("firebase-admin");
+const crypto = require('crypto');
 
 // Initialize Firebase Admin SDK if not already initialized
 if (!admin.apps.length) {
@@ -20,180 +21,131 @@ app.use(cors({
 
 app.use(express.json());
 
-// Placeholder for a new payment system
-app.post("/processPayment", async (req, res) => {
+// PhonePe payment integration
+const MERCHANT_ID = "MERCHANTUAT";
+const SALT_KEY = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+const SALT_INDEX = 1;
+const ENV = "UAT"; // or "PROD" for production
+
+// Helper function to generate PhonePe checksum
+const generateChecksum = (payload, saltKey) => {
+  const data = payload + "/pg/v1/pay" + saltKey;
+  return crypto.createHash('sha256').update(data).digest('hex') + "###" + SALT_INDEX;
+};
+
+// Initialize payment with PhonePe
+app.post("/initializePayment", async (req, res) => {
   try {
-    // validate payload
-    const { amount, customerEmail, customerPhone, customerName, notes } = req.body;
+    const { amount, userId, toolId } = req.body;
     
-    console.log("Order payload:", {
-      amount,
-      customerEmail,
-      customerPhone,
-      customerName,
-      notes
-    });
-    
-    if (!amount || !customerEmail || !customerName) {
+    if (!amount || !userId || !toolId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
+
+    const merchantTransactionId = `TXN_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     
-    // Generate an order ID
-    const orderId = "order_" + Date.now();
-
-    // Placeholder for actual payment processing logic
-    // This would be replaced with your new payment provider's API calls
-
-    // Mock successful response
-    const mockResponse = {
-      success: true,
-      orderId: orderId,
-      paymentId: "pay_" + Date.now(),
-      amount: amount
+    const payload = {
+      merchantId: MERCHANT_ID,
+      merchantTransactionId: merchantTransactionId,
+      merchantUserId: userId,
+      amount: amount * 100, // Convert to paise
+      redirectUrl: `https://rankblaze.in/payment-status?merchantTransactionId=${merchantTransactionId}`,
+      redirectMode: "POST",
+      callbackUrl: `https://us-central1-rankblaze-138f7.cloudfunctions.net/api/paymentCallback`,
+      mobileNumber: "9999999999",
+      paymentInstrument: {
+        type: "PAY_PAGE"
+      }
     };
 
-    res.status(200).send(mockResponse);
-  } catch (err) {
-    console.error("Payment error:", err.message);
-    res.status(500).send({ error: "Server error processing payment" });
-  }
-});
+    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const checksum = generateChecksum(base64Payload, SALT_KEY);
 
-// Placeholder for payment verification
-app.post("/verifyPayment", async (req, res) => {
-  try {
-    const { orderId, paymentId } = req.body;
-    
-    if (!orderId || !paymentId) {
-      return res.status(400).json({ error: "Missing order ID or payment ID" });
-    }
-    
-    // Placeholder for verification logic
-    // This would be replaced with actual verification calls to your payment provider
-    
-    // Mock successful verification
+    // Store transaction details in Firebase
+    await admin.database().ref(`transactions/${merchantTransactionId}`).set({
+      userId,
+      toolId,
+      amount,
+      status: 'initiated',
+      createdAt: admin.database.ServerValue.TIMESTAMP
+    });
+
     res.status(200).json({
       success: true,
-      verified: true,
-      orderId: orderId,
-      paymentId: paymentId,
-      status: "PAID"
+      payload: base64Payload,
+      checksum,
+      merchantTransactionId
     });
   } catch (error) {
-    console.error("Error verifying payment:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to verify payment"
-    });
+    console.error("Payment initialization error:", error);
+    res.status(500).json({ error: "Failed to initialize payment" });
   }
 });
 
-// Webhook handler for payment notifications
-app.post("/paymentWebhook", async (req, res) => {
+// PhonePe payment callback
+app.post("/paymentCallback", async (req, res) => {
   try {
-    const event = req.body;
-    console.log('Received payment webhook:', event);
-    
-    // Placeholder for webhook handling logic
-    // This would process notifications from your payment provider
-    
-    res.status(200).send({ received: true });
+    const { merchantTransactionId, transactionId, amount, status } = req.body;
+
+    // Verify the payment status with PhonePe
+    const response = await fetch(`https://api.phonepe.com/apis/hermes/pg/v1/status/${merchantTransactionId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-VERIFY': generateChecksum(merchantTransactionId, SALT_KEY)
+      }
+    });
+
+    const paymentStatus = await response.json();
+
+    if (paymentStatus.success) {
+      // Get transaction details from Firebase
+      const transactionRef = admin.database().ref(`transactions/${merchantTransactionId}`);
+      const transactionSnapshot = await transactionRef.once('value');
+      const transaction = transactionSnapshot.val();
+
+      if (transaction) {
+        // Update transaction status
+        await transactionRef.update({
+          status: paymentStatus.code === 'PAYMENT_SUCCESS' ? 'completed' : 'failed',
+          phonepeTransactionId: transactionId,
+          updatedAt: admin.database.ServerValue.TIMESTAMP
+        });
+
+        // If payment successful, grant tool access
+        if (paymentStatus.code === 'PAYMENT_SUCCESS') {
+          const userRef = admin.database().ref(`users/${transaction.userId}`);
+          const toolsRef = userRef.child('tools');
+          
+          // Add tool to user's tools array
+          await toolsRef.transaction(currentTools => {
+            if (currentTools === null) return [transaction.toolId];
+            if (!currentTools.includes(transaction.toolId)) {
+              currentTools.push(transaction.toolId);
+            }
+            return currentTools;
+          });
+
+          // Create subscription record
+          const subscriptionRef = admin.database().ref('subscriptions').push();
+          await subscriptionRef.set({
+            userId: transaction.userId,
+            toolId: transaction.toolId,
+            status: 'active',
+            startDate: Date.now(),
+            endDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+            createdAt: admin.database.ServerValue.TIMESTAMP
+          });
+        }
+      }
+    }
+
+    res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Error processing payment webhook:', error);
-    res.status(500).send({ error: 'Failed to process webhook' });
+    console.error("Payment callback error:", error);
+    res.status(500).json({ error: "Failed to process payment callback" });
   }
 });
 
 // Export the express app as a Cloud Function
 exports.api = functions.https.onRequest(app);
-
-// Create a callable function for processing payments from the client
-exports.processPayment = functions.https.onCall(async (data, context) => {
-  try {
-    // Ensure user is authenticated
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        'You must be logged in to make a payment'
-      );
-    }
-    
-    const userId = context.auth.uid;
-    const { amount, items } = data;
-    
-    if (!amount || !items) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Payment requires an amount and items'
-      );
-    }
-    
-    // Generate an order ID
-    const orderId = `order_${userId.slice(-4)}_${Date.now()}`;
-    
-    // Store the order in the database
-    await admin.database().ref(`orders/${orderId}`).set({
-      userId,
-      amount,
-      items,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    });
-    
-    // Return order details to the client
-    return {
-      success: true,
-      orderId,
-      amount
-    };
-  } catch (error) {
-    console.error('Error processing payment:', error);
-    throw new functions.https.HttpsError(
-      'internal',
-      'Payment processing failed'
-    );
-  }
-});
-
-// Verify a payment
-exports.verifyPayment = functions.https.onCall(async (data, context) => {
-  try {
-    // Ensure user is authenticated
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        'You must be logged in to verify a payment'
-      );
-    }
-    
-    const { orderId } = data;
-    
-    if (!orderId) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Order ID is required'
-      );
-    }
-    
-    // Placeholder for payment verification
-    // In a real implementation, you would call your payment provider's API
-    
-    // Update the order status
-    await admin.database().ref(`orders/${orderId}`).update({
-      status: 'completed',
-      updatedAt: new Date().toISOString()
-    });
-    
-    return {
-      success: true,
-      verified: true,
-      status: 'completed'
-    };
-  } catch (error) {
-    console.error('Error verifying payment:', error);
-    throw new functions.https.HttpsError(
-      'internal',
-      'Payment verification failed'
-    );
-  }
-}); 

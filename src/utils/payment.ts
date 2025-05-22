@@ -1,33 +1,81 @@
 import { db } from '../config/firebase';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { ref, set, push } from 'firebase/database';
 
-export const initializePayment = async (amount: number, userId: string, productDetails: any) => {
+interface PaymentInitResponse {
+  success: boolean;
+  payload: string;
+  checksum: string;
+  merchantTransactionId: string;
+}
+
+export const initializePhonePePayment = async (
+  amount: number, 
+  userId: string, 
+  toolId: string
+): Promise<PaymentInitResponse> => {
   try {
-    // Create subscription record
-    const subscriptionRef = await addDoc(collection(db, 'subscriptions'), {
-      userId,
-      productId: productDetails.id,
-      productName: productDetails.name,
-      price: productDetails.price,
-      startDate: Timestamp.now(),
-      endDate: Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)), // 30 days
-      status: 'active',
-      createdAt: Timestamp.now()
-    });
+    const response = await fetch(
+      'https://us-central1-rankblaze-138f7.cloudfunctions.net/api/initializePayment',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ amount, userId, toolId }),
+      }
+    );
 
-    // Generate access token
-    await addDoc(collection(db, 'access_tokens'), {
-      userId,
-      subscriptionId: subscriptionRef.id,
-      token: crypto.randomUUID(),
-      expiresAt: Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)), // 30 days
-      isActive: true,
-      createdAt: Timestamp.now()
-    });
+    if (!response.ok) {
+      throw new Error('Failed to initialize payment');
+    }
 
-    window.location.href = '/dashboard';
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('Payment initialization failed:', error);
     throw error;
+  }
+};
+
+export const redirectToPhonePe = (payload: string, checksum: string): void => {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'https://pay.phonepe.com/api/v1/redirect';
+
+  const payloadInput = document.createElement('input');
+  payloadInput.type = 'hidden';
+  payloadInput.name = 'request';
+  payloadInput.value = payload;
+
+  const checksumInput = document.createElement('input');
+  checksumInput.type = 'hidden';
+  checksumInput.name = 'checksum';
+  checksumInput.value = checksum;
+
+  form.appendChild(payloadInput);
+  form.appendChild(checksumInput);
+  document.body.appendChild(form);
+  form.submit();
+};
+
+export const verifyPaymentStatus = async (merchantTransactionId: string): Promise<boolean> => {
+  try {
+    const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
+    const snapshot = await new Promise((resolve) => {
+      const unsubscribe = onValue(transactionRef, (snapshot) => {
+        unsubscribe();
+        resolve(snapshot);
+      });
+    });
+
+    if (snapshot.exists()) {
+      const transaction = snapshot.val();
+      return transaction.status === 'completed';
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error verifying payment status:', error);
+    return false;
   }
 };

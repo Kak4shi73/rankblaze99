@@ -13,10 +13,12 @@
   "dependencies": {
     "@tanstack/react-table": "^8.13.2",
     "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
     "express": "^5.1.0",
     "firebase": "^10.8.0",
     "firebase-admin": "^12.0.0",
     "lucide-react": "^0.358.0",
+    "phonepe-sdk": "^1.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.4.3",
