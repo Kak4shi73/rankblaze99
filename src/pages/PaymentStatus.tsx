@@ -1,4 +1,3 @@
-```typescript
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { verifyPaymentStatus } from '../utils/payment';
@@ -81,4 +80,3 @@ const PaymentStatus = () => {
 };
 
 export default PaymentStatus;
-```
