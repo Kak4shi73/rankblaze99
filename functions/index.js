@@ -1,3 +1,4 @@
+```javascript
 const functions = require("firebase-functions");
 const express = require("express");
 const cors = require("cors");
@@ -27,10 +28,10 @@ app.use(cors({
 app.use(express.json());
 
 // PhonePe payment integration
-const MERCHANT_ID = "MERCHANTUAT";
-const SALT_KEY = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
-const SALT_INDEX = 1;
-const ENV = "UAT"; // or "PROD" for production
+const MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || "MERCHANTUAT";
+const SALT_KEY = process.env.PHONEPE_SALT_KEY || "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+const SALT_INDEX = process.env.PHONEPE_SALT_INDEX || "1";
+const ENV = process.env.PHONEPE_ENV || "UAT";
 
 // Helper function to generate PhonePe checksum
 const generateChecksum = (payload, saltKey) => {
@@ -92,56 +93,43 @@ app.post("/paymentCallback", async (req, res) => {
   try {
     const { merchantTransactionId, transactionId, amount, status } = req.body;
 
-    // Verify the payment status with PhonePe
-    const response = await fetch(`https://api.phonepe.com/apis/hermes/pg/v1/status/${merchantTransactionId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-VERIFY': generateChecksum(merchantTransactionId, SALT_KEY)
-      }
-    });
+    // Get transaction details from Firebase
+    const transactionRef = admin.database().ref(`transactions/${merchantTransactionId}`);
+    const transactionSnapshot = await transactionRef.once('value');
+    const transaction = transactionSnapshot.val();
 
-    const paymentStatus = await response.json();
+    if (transaction) {
+      // Update transaction status
+      await transactionRef.update({
+        status: status === 'PAYMENT_SUCCESS' ? 'completed' : 'failed',
+        phonepeTransactionId: transactionId,
+        updatedAt: admin.database.ServerValue.TIMESTAMP
+      });
 
-    if (paymentStatus.success) {
-      // Get transaction details from Firebase
-      const transactionRef = admin.database().ref(`transactions/${merchantTransactionId}`);
-      const transactionSnapshot = await transactionRef.once('value');
-      const transaction = transactionSnapshot.val();
-
-      if (transaction) {
-        // Update transaction status
-        await transactionRef.update({
-          status: paymentStatus.code === 'PAYMENT_SUCCESS' ? 'completed' : 'failed',
-          phonepeTransactionId: transactionId,
-          updatedAt: admin.database.ServerValue.TIMESTAMP
+      // If payment successful, grant tool access
+      if (status === 'PAYMENT_SUCCESS') {
+        const userRef = admin.database().ref(`users/${transaction.userId}`);
+        const toolsRef = userRef.child('tools');
+        
+        // Add tool to user's tools array
+        await toolsRef.transaction(currentTools => {
+          if (currentTools === null) return [transaction.toolId];
+          if (!currentTools.includes(transaction.toolId)) {
+            currentTools.push(transaction.toolId);
+          }
+          return currentTools;
         });
 
-        // If payment successful, grant tool access
-        if (paymentStatus.code === 'PAYMENT_SUCCESS') {
-          const userRef = admin.database().ref(`users/${transaction.userId}`);
-          const toolsRef = userRef.child('tools');
-          
-          // Add tool to user's tools array
-          await toolsRef.transaction(currentTools => {
-            if (currentTools === null) return [transaction.toolId];
-            if (!currentTools.includes(transaction.toolId)) {
-              currentTools.push(transaction.toolId);
-            }
-            return currentTools;
-          });
-
-          // Create subscription record
-          const subscriptionRef = admin.database().ref('subscriptions').push();
-          await subscriptionRef.set({
-            userId: transaction.userId,
-            toolId: transaction.toolId,
-            status: 'active',
-            startDate: Date.now(),
-            endDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
-            createdAt: admin.database.ServerValue.TIMESTAMP
-          });
-        }
+        // Create subscription record
+        const subscriptionRef = admin.database().ref('subscriptions').push();
+        await subscriptionRef.set({
+          userId: transaction.userId,
+          toolId: transaction.toolId,
+          status: 'active',
+          startDate: Date.now(),
+          endDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+          createdAt: admin.database.ServerValue.TIMESTAMP
+        });
       }
     }
 
@@ -154,3 +142,4 @@ app.post("/paymentCallback", async (req, res) => {
 
 // Export the express app as a Cloud Function
 exports.api = functions.https.onRequest(app);
+```

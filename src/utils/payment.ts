@@ -1,5 +1,6 @@
+```typescript
 import { db } from '../config/firebase';
-import { ref, set, push } from 'firebase/database';
+import { ref, get, onValue } from 'firebase/database';
 
 interface PaymentInitResponse {
   success: boolean;
@@ -37,45 +38,28 @@ export const initializePhonePePayment = async (
   }
 };
 
-export const redirectToPhonePe = (payload: string, checksum: string): void => {
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'https://pay.phonepe.com/api/v1/redirect';
-
-  const payloadInput = document.createElement('input');
-  payloadInput.type = 'hidden';
-  payloadInput.name = 'request';
-  payloadInput.value = payload;
-
-  const checksumInput = document.createElement('input');
-  checksumInput.type = 'hidden';
-  checksumInput.name = 'checksum';
-  checksumInput.value = checksum;
-
-  form.appendChild(payloadInput);
-  form.appendChild(checksumInput);
-  document.body.appendChild(form);
-  form.submit();
-};
-
 export const verifyPaymentStatus = async (merchantTransactionId: string): Promise<boolean> => {
   try {
     const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
-    const snapshot = await new Promise((resolve) => {
-      const unsubscribe = onValue(transactionRef, (snapshot) => {
-        unsubscribe();
-        resolve(snapshot);
-      });
-    });
-
-    if (snapshot.exists()) {
-      const transaction = snapshot.val();
-      return transaction.status === 'completed';
+    
+    // Wait for status update for up to 30 seconds
+    for (let i = 0; i < 30; i++) {
+      const snapshot = await get(transactionRef);
+      if (snapshot.exists()) {
+        const transaction = snapshot.val();
+        if (transaction.status === 'completed') {
+          return true;
+        } else if (transaction.status === 'failed') {
+          return false;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-
+    
     return false;
   } catch (error) {
     console.error('Error verifying payment status:', error);
     return false;
   }
 };
+```

@@ -3,14 +3,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { initializePhonePePayment, redirectToPhonePe } from '../utils/payment';
+import { initializePhonePePayment } from '../utils/payment';
 import { CreditCard, ArrowLeft } from 'lucide-react';
 
 const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { cartItems, getTotalPrice } = useCart();
+  const { cartItems, getTotalPrice, clearCart } = useCart();
   const totalAmount = getTotalPrice();
 
   const handlePlaceOrder = async () => {
@@ -22,19 +22,36 @@ const Checkout = () => {
     setIsProcessing(true);
 
     try {
-      // Initialize payment for each tool in cart
-      for (const item of cartItems) {
-        const response = await initializePhonePePayment(
-          item.price,
-          user.id,
-          item.id
-        );
+      // Initialize payment for first item in cart
+      const item = cartItems[0];
+      const response = await initializePhonePePayment(
+        item.price,
+        user.id,
+        item.id
+      );
 
-        if (response.success) {
-          // Redirect to PhonePe payment page
-          redirectToPhonePe(response.payload, response.checksum);
-          return;
-        }
+      if (response.success) {
+        // Create form and submit to PhonePe
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        
+        const payloadInput = document.createElement('input');
+        payloadInput.type = 'hidden';
+        payloadInput.name = 'request';
+        payloadInput.value = response.payload;
+
+        const checksumInput = document.createElement('input');
+        checksumInput.type = 'hidden';
+        checksumInput.name = 'checksum';
+        checksumInput.value = response.checksum;
+
+        form.appendChild(payloadInput);
+        form.appendChild(checksumInput);
+        document.body.appendChild(form);
+        form.submit();
+      } else {
+        throw new Error('Payment initialization failed');
       }
     } catch (error) {
       console.error('Payment error:', error);
