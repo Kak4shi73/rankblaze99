@@ -77,6 +77,8 @@ export const verifyPaymentStatus = async (merchantTransactionId: string): Promis
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
+        mode: 'cors'
       }
     );
 

@@ -286,104 +286,130 @@ const generateChecksum = (payload: string, saltKey: string): string => {
   return crypto.SHA256(string).toString(crypto.enc.Base64);
 };
 
-// Initialize payment - Using the correct CORS implementation
-app.post('/initializePayment', (req: Request, res: Response) => {
-  corsHandler(req, res, async () => {
-    try {
-      const { amount, userId, toolId } = req.body;
+// Initialize payment with explicit CORS headers
+app.post('/initializePayment', async (req: Request, res: Response) => {
+  // Set CORS headers for preflight request
+  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Credentials", "true");
 
-      if (!amount || !userId || !toolId) {
-        return res.status(400).json({ success: false, error: 'Missing required parameters' });
-      }
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(204).send(""); // No content
+  }
 
-      // Create a unique merchant transaction ID
-      const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      
-      // Save transaction details in Firebase
-      const db = admin.firestore();
-      await db.collection('transactions').doc(merchantTransactionId).set({
-        userId,
-        toolId,
-        amount,
-        status: 'initiated',
-        merchantTransactionId,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+  if (req.method !== "POST") {
+    return res.status(405).send("Method Not Allowed");
+  }
 
-      // Create PhonePe payload
-      const payloadData = {
-        merchantId: PHONEPE_CONFIG.merchantId,
-        merchantTransactionId,
-        merchantUserId: userId,
-        amount: amount * 100, // Convert to paise
-        redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-        redirectMode: 'REDIRECT',
-        callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-        mobileNumber: '9999999999', // Optional, can be removed or made dynamic
-        paymentInstrument: {
-          type: 'PAY_PAGE'
-        }
-      };
+  try {
+    const { amount, userId, toolId } = req.body;
 
-      const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
-      const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
-
-      // Save data needed for verification in Realtime Database for faster access
-      const rtdb = admin.database();
-      await rtdb.ref(`transactions/${merchantTransactionId}`).set({
-        status: 'initiated',
-        amount,
-        userId,
-        toolId,
-        createdAt: Date.now(),
-        checksum,
-        payload: base64Payload
-      });
-
-      return res.status(200).json({
-        success: true,
-        payload: base64Payload,
-        checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
-        merchantTransactionId
-      });
-    } catch (error) {
-      console.error('Error initializing payment:', error);
-      return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+    if (!amount || !userId || !toolId) {
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
     }
-  });
+
+    // Create a unique merchant transaction ID
+    const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    
+    // Save transaction details in Firebase
+    const db = admin.firestore();
+    await db.collection('transactions').doc(merchantTransactionId).set({
+      userId,
+      toolId,
+      amount,
+      status: 'initiated',
+      merchantTransactionId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Create PhonePe payload
+    const payloadData = {
+      merchantId: PHONEPE_CONFIG.merchantId,
+      merchantTransactionId,
+      merchantUserId: userId,
+      amount: amount * 100, // Convert to paise
+      redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+      mobileNumber: '9999999999', // Optional, can be removed or made dynamic
+      paymentInstrument: {
+        type: 'PAY_PAGE'
+      }
+    };
+
+    const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
+    const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
+
+    // Save data needed for verification in Realtime Database for faster access
+    const rtdb = admin.database();
+    await rtdb.ref(`transactions/${merchantTransactionId}`).set({
+      status: 'initiated',
+      amount,
+      userId,
+      toolId,
+      createdAt: Date.now(),
+      checksum,
+      payload: base64Payload
+    });
+
+    return res.status(200).json({
+      success: true,
+      payload: base64Payload,
+      checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
+      merchantTransactionId
+    });
+  } catch (error) {
+    console.error('Error initializing payment:', error);
+    return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+  }
 });
 
-// Verify payment status - Using the correct CORS implementation
-app.get('/verifyPayment', (req: Request, res: Response) => {
-  corsHandler(req, res, async () => {
-    try {
-      const { merchantTransactionId } = req.query;
+// Verify payment status with explicit CORS headers
+app.get('/verifyPayment', async (req: Request, res: Response) => {
+  // Set CORS headers for preflight request
+  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Credentials", "true");
 
-      if (!merchantTransactionId) {
-        return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
-      }
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(204).send(""); // No content
+  }
 
-      // Fetch transaction from Firestore
-      const db = admin.firestore();
-      const transactionDoc = await db.collection('transactions').doc(merchantTransactionId as string).get();
+  if (req.method !== "GET") {
+    return res.status(405).send("Method Not Allowed");
+  }
 
-      if (!transactionDoc.exists) {
-        return res.status(404).json({ success: false, error: 'Transaction not found' });
-      }
+  try {
+    const { merchantTransactionId } = req.query;
 
-      const transactionData = transactionDoc.data();
-
-      return res.status(200).json({
-        success: true,
-        status: transactionData?.status || 'unknown',
-        transactionId: merchantTransactionId
-      });
-    } catch (error) {
-      console.error('Error verifying payment:', error);
-      return res.status(500).json({ success: false, error: 'Payment verification failed' });
+    if (!merchantTransactionId) {
+      return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
     }
-  });
+
+    // Fetch transaction from Firestore
+    const db = admin.firestore();
+    const transactionDoc = await db.collection('transactions').doc(merchantTransactionId as string).get();
+
+    if (!transactionDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+
+    const transactionData = transactionDoc.data();
+
+    return res.status(200).json({
+      success: true,
+      status: transactionData?.status || 'unknown',
+      transactionId: merchantTransactionId
+    });
+  } catch (error) {
+    console.error('Error verifying payment:', error);
+    return res.status(500).json({ success: false, error: 'Payment verification failed' });
+  }
 });
 
 // Payment callback handler - Using the correct CORS implementation
