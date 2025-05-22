@@ -86,7 +86,7 @@ export const sendOTPEmail = functions.https.onCall(
         from: functions.config().email?.user || process.env.EMAIL_USER || 'your-email@gmail.com',
         to: email,
         subject: subject || 'Your Verification Code',
-        html: emailTemplates[template as keyof typeof emailTemplates](otp)
+        html: template === 'otp' ? emailTemplates.otp(otp) : emailTemplates.payment(otp, 0)
       };
 
       // Send email
@@ -259,22 +259,16 @@ export const getToolSession = functions.https.onCall(
 // Set up express app for API endpoints
 const app = express();
 
-// Simple CORS middleware that works for all routes
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-VERIFY');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(204).send('');
-  }
-  
-  next();
+// Configure CORS with the cors package
+const corsHandler = cors({
+  origin: 'https://www.rankblaze.in',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-VERIFY'],
+  credentials: true
 });
 
-// Enable JSON parsing
+// Apply CORS to all routes
+app.use(corsHandler);
 app.use(express.json());
 
 // PhonePe configuration
@@ -292,263 +286,258 @@ const generateChecksum = (payload: string, saltKey: string): string => {
   return crypto.SHA256(string).toString(crypto.enc.Base64);
 };
 
-// Initialize payment
-app.post('/initializePayment', async (req: Request, res: Response) => {
-  // Handle CORS for this specific endpoint
-  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
-  
-  try {
-    const { amount, userId, toolId } = req.body;
+// Initialize payment - Using the correct CORS implementation
+app.post('/initializePayment', (req: Request, res: Response) => {
+  corsHandler(req, res, async () => {
+    try {
+      const { amount, userId, toolId } = req.body;
 
-    if (!amount || !userId || !toolId) {
-      return res.status(400).json({ success: false, error: 'Missing required parameters' });
-    }
-
-    // Create a unique merchant transaction ID
-    const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    
-    // Save transaction details in Firebase
-    const db = admin.firestore();
-    await db.collection('transactions').doc(merchantTransactionId).set({
-      userId,
-      toolId,
-      amount,
-      status: 'initiated',
-      merchantTransactionId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Create PhonePe payload
-    const payloadData = {
-      merchantId: PHONEPE_CONFIG.merchantId,
-      merchantTransactionId,
-      merchantUserId: userId,
-      amount: amount * 100, // Convert to paise
-      redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-      redirectMode: 'REDIRECT',
-      callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-      mobileNumber: '9999999999', // Optional, can be removed or made dynamic
-      paymentInstrument: {
-        type: 'PAY_PAGE'
+      if (!amount || !userId || !toolId) {
+        return res.status(400).json({ success: false, error: 'Missing required parameters' });
       }
-    };
 
-    const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
-    const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
+      // Create a unique merchant transaction ID
+      const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      
+      // Save transaction details in Firebase
+      const db = admin.firestore();
+      await db.collection('transactions').doc(merchantTransactionId).set({
+        userId,
+        toolId,
+        amount,
+        status: 'initiated',
+        merchantTransactionId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
 
-    // PhonePe API request format
-    const requestData = {
-      request: base64Payload
-    };
-
-    // Save data needed for verification in Realtime Database for faster access
-    const rtdb = admin.database();
-    await rtdb.ref(`transactions/${merchantTransactionId}`).set({
-      status: 'initiated',
-      amount,
-      userId,
-      toolId,
-      createdAt: Date.now(),
-      checksum,
-      payload: base64Payload
-    });
-
-    return res.status(200).json({
-      success: true,
-      payload: base64Payload,
-      checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
-      merchantTransactionId
-    });
-  } catch (error) {
-    console.error('Error initializing payment:', error);
-    return res.status(500).json({ success: false, error: 'Payment initialization failed' });
-  }
-});
-
-// Verify payment status
-app.get('/verifyPayment', async (req: Request, res: Response) => {
-  // Handle CORS for this specific endpoint
-  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
-  
-  try {
-    const { merchantTransactionId } = req.query;
-
-    if (!merchantTransactionId) {
-      return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
-    }
-
-    // Fetch transaction from Firestore
-    const db = admin.firestore();
-    const transactionDoc = await db.collection('transactions').doc(merchantTransactionId as string).get();
-
-    if (!transactionDoc.exists) {
-      return res.status(404).json({ success: false, error: 'Transaction not found' });
-    }
-
-    const transactionData = transactionDoc.data();
-
-    return res.status(200).json({
-      success: true,
-      status: transactionData?.status || 'unknown',
-      transactionId: merchantTransactionId
-    });
-  } catch (error) {
-    console.error('Error verifying payment:', error);
-    return res.status(500).json({ success: false, error: 'Payment verification failed' });
-  }
-});
-
-// Payment callback handler 
-app.post('/paymentCallback', async (req: Request, res: Response) => {
-  // Handle CORS for this specific endpoint
-  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
-  
-  try {
-    const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
-
-    if (!merchantTransactionId || !transactionId || !responseCode) {
-      console.error('Missing required parameters in callback:', req.body);
-      return res.status(400).json({ success: false, error: 'Missing required parameters' });
-    }
-
-    // Get transaction from Firestore
-    const db = admin.firestore();
-    const transactionRef = db.collection('transactions').doc(merchantTransactionId);
-    const transactionDoc = await transactionRef.get();
-
-    if (!transactionDoc.exists) {
-      console.error('Transaction not found:', merchantTransactionId);
-      return res.status(404).json({ success: false, error: 'Transaction not found' });
-    }
-
-    const transactionData = transactionDoc.data();
-    if (!transactionData) {
-      return res.status(404).json({ success: false, error: 'Transaction data not found' });
-    }
-    
-    const isSuccess = responseCode === 'SUCCESS' || responseCode === 'PAYMENT_SUCCESS';
-
-    // Update transaction in Firestore
-    await transactionRef.update({
-      status: isSuccess ? 'completed' : 'failed',
-      responseCode,
-      transactionId,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Update Realtime DB for faster access
-    const rtdb = admin.database();
-    await rtdb.ref(`transactions/${merchantTransactionId}`).update({
-      status: isSuccess ? 'completed' : 'failed',
-      responseCode,
-      transactionId,
-      updatedAt: Date.now()
-    });
-
-    // Process the successful payment
-    if (isSuccess) {
-      try {
-        // Add tool to user's collection
-        const userId = transactionData.userId;
-        const toolId = transactionData.toolId;
-        const paymentAmount = transactionData.amount;
-        
-        // Add to user's purchased tools in Firestore
-        await db.collection('users').doc(userId).update({
-          tools: admin.firestore.FieldValue.arrayUnion(toolId),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Create a payment record
-        await db.collection('user_payments').add({
-          userId,
-          toolId,
-          amount: paymentAmount,
-          paymentMethod: 'PhonePe',
-          status: 'completed',
-          merchantTransactionId,
-          transactionId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Add to admin payments collection for analytics
-        await db.collection('admin_payments').add({
-          userId,
-          toolId,
-          amount: paymentAmount,
-          paymentMethod: 'PhonePe',
-          status: 'completed',
-          merchantTransactionId,
-          transactionId, 
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Find user email to send confirmation
-        const userDoc = await db.collection('users').doc(userId).get();
-        if (userDoc.exists && userDoc.data()?.email) {
-          // Send payment confirmation email
-          const mailOptions = {
-            from: functions.config().email?.user || process.env.EMAIL_USER || 'your-email@gmail.com',
-            to: userDoc.data()?.email,
-            subject: 'Payment Confirmation - RANKBLAZE',
-            html: emailTemplates.payment(merchantTransactionId as string, paymentAmount)
-          };
-
-          await transporter.sendMail(mailOptions);
+      // Create PhonePe payload
+      const payloadData = {
+        merchantId: PHONEPE_CONFIG.merchantId,
+        merchantTransactionId,
+        merchantUserId: userId,
+        amount: amount * 100, // Convert to paise
+        redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+        redirectMode: 'REDIRECT',
+        callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+        mobileNumber: '9999999999', // Optional, can be removed or made dynamic
+        paymentInstrument: {
+          type: 'PAY_PAGE'
         }
-      } catch (error) {
-        console.error('Error processing successful payment:', error);
-        // We'll still return success since the payment itself was successful
+      };
+
+      const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
+      const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
+
+      // Save data needed for verification in Realtime Database for faster access
+      const rtdb = admin.database();
+      await rtdb.ref(`transactions/${merchantTransactionId}`).set({
+        status: 'initiated',
+        amount,
+        userId,
+        toolId,
+        createdAt: Date.now(),
+        checksum,
+        payload: base64Payload
+      });
+
+      return res.status(200).json({
+        success: true,
+        payload: base64Payload,
+        checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
+        merchantTransactionId
+      });
+    } catch (error) {
+      console.error('Error initializing payment:', error);
+      return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+    }
+  });
+});
+
+// Verify payment status - Using the correct CORS implementation
+app.get('/verifyPayment', (req: Request, res: Response) => {
+  corsHandler(req, res, async () => {
+    try {
+      const { merchantTransactionId } = req.query;
+
+      if (!merchantTransactionId) {
+        return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
       }
-    }
 
-    return res.status(200).json({
-      success: true,
-      status: isSuccess ? 'completed' : 'failed'
-    });
-  } catch (error) {
-    console.error('Error in payment callback:', error);
-    return res.status(500).json({ success: false, error: 'Payment callback processing failed' });
-  }
+      // Fetch transaction from Firestore
+      const db = admin.firestore();
+      const transactionDoc = await db.collection('transactions').doc(merchantTransactionId as string).get();
+
+      if (!transactionDoc.exists) {
+        return res.status(404).json({ success: false, error: 'Transaction not found' });
+      }
+
+      const transactionData = transactionDoc.data();
+
+      return res.status(200).json({
+        success: true,
+        status: transactionData?.status || 'unknown',
+        transactionId: merchantTransactionId
+      });
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+      return res.status(500).json({ success: false, error: 'Payment verification failed' });
+    }
+  });
 });
 
-// Get user tools API
-app.get('/getUserTools', async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'Missing userId' });
+// Payment callback handler - Using the correct CORS implementation
+app.post('/paymentCallback', (req: Request, res: Response) => {
+  corsHandler(req, res, async () => {
+    try {
+      const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
+
+      if (!merchantTransactionId || !transactionId || !responseCode) {
+        console.error('Missing required parameters in callback:', req.body);
+        return res.status(400).json({ success: false, error: 'Missing required parameters' });
+      }
+
+      // Get transaction from Firestore
+      const db = admin.firestore();
+      const transactionRef = db.collection('transactions').doc(merchantTransactionId);
+      const transactionDoc = await transactionRef.get();
+
+      if (!transactionDoc.exists) {
+        console.error('Transaction not found:', merchantTransactionId);
+        return res.status(404).json({ success: false, error: 'Transaction not found' });
+      }
+
+      const transactionData = transactionDoc.data();
+      if (!transactionData) {
+        return res.status(404).json({ success: false, error: 'Transaction data not found' });
+      }
+      
+      const isSuccess = responseCode === 'SUCCESS' || responseCode === 'PAYMENT_SUCCESS';
+
+      // Update transaction in Firestore
+      await transactionRef.update({
+        status: isSuccess ? 'completed' : 'failed',
+        responseCode,
+        transactionId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      // Update Realtime DB for faster access
+      const rtdb = admin.database();
+      await rtdb.ref(`transactions/${merchantTransactionId}`).update({
+        status: isSuccess ? 'completed' : 'failed',
+        responseCode,
+        transactionId,
+        updatedAt: Date.now()
+      });
+
+      // Process the successful payment
+      if (isSuccess) {
+        try {
+          // Add tool to user's collection
+          const userId = transactionData.userId;
+          const toolId = transactionData.toolId;
+          const paymentAmount = transactionData.amount;
+          
+          // Add to user's purchased tools in Firestore
+          await db.collection('users').doc(userId).update({
+            tools: admin.firestore.FieldValue.arrayUnion(toolId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Create a payment record
+          await db.collection('user_payments').add({
+            userId,
+            toolId,
+            amount: paymentAmount,
+            paymentMethod: 'PhonePe',
+            status: 'completed',
+            merchantTransactionId,
+            transactionId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Add to admin payments collection for analytics
+          await db.collection('admin_payments').add({
+            userId,
+            toolId,
+            amount: paymentAmount,
+            paymentMethod: 'PhonePe',
+            status: 'completed',
+            merchantTransactionId,
+            transactionId, 
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Find user email to send confirmation
+          const userDoc = await db.collection('users').doc(userId).get();
+          if (userDoc.exists && userDoc.data()?.email) {
+            // Send payment confirmation email
+            const mailOptions = {
+              from: functions.config().email?.user || process.env.EMAIL_USER || 'your-email@gmail.com',
+              to: userDoc.data()?.email,
+              subject: 'Payment Confirmation - RANKBLAZE',
+              html: emailTemplates.payment(merchantTransactionId as string, paymentAmount)
+            };
+
+            await transporter.sendMail(mailOptions);
+          }
+        } catch (error) {
+          console.error('Error processing successful payment:', error);
+          // We'll still return success since the payment itself was successful
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        status: isSuccess ? 'completed' : 'failed'
+      });
+    } catch (error) {
+      console.error('Error in payment callback:', error);
+      return res.status(500).json({ success: false, error: 'Payment callback processing failed' });
     }
-    
-    // Get user from Firestore
-    const db = admin.firestore();
-    const userDoc = await db.collection('users').doc(userId as string).get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-    
-    // Return user's tools
-    const userData = userDoc.data();
-    return res.status(200).json({
-      success: true,
-      tools: userData?.tools || []
-    });
-  } catch (error) {
-    console.error('Error getting user tools:', error);
-    return res.status(500).json({ success: false, error: 'Failed to get user tools' });
-  }
+  });
 });
 
-// Add a simple CORS test endpoint
-app.get('/cors-test', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
-  res.status(200).json({ 
-    success: true, 
-    message: 'CORS is working!',
-    origin: req.headers.origin || 'unknown'
+// Get user tools API with CORS handler
+app.get('/getUserTools', (req: Request, res: Response) => {
+  corsHandler(req, res, async () => {
+    try {
+      const { userId } = req.query;
+      
+      if (!userId) {
+        return res.status(400).json({ success: false, error: 'Missing userId' });
+      }
+      
+      // Get user from Firestore
+      const db = admin.firestore();
+      const userDoc = await db.collection('users').doc(userId as string).get();
+      
+      if (!userDoc.exists) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+      
+      // Return user's tools
+      const userData = userDoc.data();
+      return res.status(200).json({
+        success: true,
+        tools: userData?.tools || []
+      });
+    } catch (error) {
+      console.error('Error getting user tools:', error);
+      return res.status(500).json({ success: false, error: 'Failed to get user tools' });
+    }
+  });
+});
+
+// Add a CORS test endpoint
+app.get('/cors-test', (req: Request, res: Response) => {
+  corsHandler(req, res, () => {
+    res.status(200).json({ 
+      success: true, 
+      message: 'CORS is working!',
+      origin: req.headers.origin || 'unknown'
+    });
   });
 });
 
