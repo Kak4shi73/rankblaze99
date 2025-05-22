@@ -561,5 +561,32 @@ app.get('/getUserTools', async (req: Request, res: Response) => {
   }
 });
 
-// Express app as Cloud Function
+// Add a simple CORS test endpoint
+app.get('/cors-test', corsMiddleware, (req, res) => {
+  // Set CORS headers directly for maximum compatibility
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  return res.status(200).json({ 
+    success: true, 
+    message: 'CORS is working!',
+    origin: req.headers.origin || 'unknown'
+  });
+});
+
+// Ensure all unhandled routes also work with CORS
+app.all('*', corsMiddleware, (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  return res.status(404).json({ success: false, error: 'Route not found' });
+});
+
+// Export the Express app as a Cloud Function
 export const api = functions.https.onRequest(app); 
