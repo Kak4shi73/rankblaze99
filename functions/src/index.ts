@@ -259,32 +259,33 @@ export const getToolSession = functions.https.onCall(
 // Set up express app for API endpoints
 const app = express();
 
-// Configure CORS with specific origins
-const corsOptions = {
-  origin: [
-    'https://rankblaze.in',
-    'https://www.rankblaze.in',
-    'https://rankblaze-138f7.web.app',
-    'https://rankblaze-138f7.firebaseapp.com',
-    'http://localhost:3000',
-    'http://localhost:5173'
-  ],
+// Configure CORS 
+const corsMiddleware = cors({
+  origin: true, // Automatically reflect the request origin
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-VERIFY'],
-  exposedHeaders: ['Cross-Origin-Opener-Policy', 'Cross-Origin-Embedder-Policy'],
-  credentials: true
-};
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-VERIFY']
+});
 
-// Middleware
-app.use(cors(corsOptions));
+// Apply CORS to all routes
+app.use(corsMiddleware);
 app.use(express.json());
 
 // Add headers to handle Cross-Origin policies
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
   next();
 });
+
+// Wrap all routes with CORS middleware
+app.options('*', corsMiddleware);
 
 // PhonePe configuration
 const PHONEPE_CONFIG = {
@@ -302,8 +303,14 @@ const generateChecksum = (payload: string, saltKey: string): string => {
 };
 
 // Initialize payment
-app.post('/initializePayment', async (req: Request, res: Response) => {
+app.post('/initializePayment', corsMiddleware, async (req: Request, res: Response) => {
   try {
+    // Set CORS headers directly
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
     const { amount, userId, toolId } = req.body;
 
     if (!amount || !userId || !toolId) {
@@ -373,8 +380,14 @@ app.post('/initializePayment', async (req: Request, res: Response) => {
 });
 
 // Verify payment status
-app.get('/verifyPayment', async (req: Request, res: Response) => {
+app.get('/verifyPayment', corsMiddleware, async (req: Request, res: Response) => {
   try {
+    // Set CORS headers directly
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
     const { merchantTransactionId } = req.query;
 
     if (!merchantTransactionId) {
@@ -403,8 +416,14 @@ app.get('/verifyPayment', async (req: Request, res: Response) => {
 });
 
 // Payment callback handler 
-app.post('/paymentCallback', async (req: Request, res: Response) => {
+app.post('/paymentCallback', corsMiddleware, async (req: Request, res: Response) => {
   try {
+    // Set CORS headers directly
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
     const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
 
     if (!merchantTransactionId || !transactionId || !responseCode) {
