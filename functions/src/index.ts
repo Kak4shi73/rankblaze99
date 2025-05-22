@@ -4,6 +4,7 @@ import * as nodemailer from 'nodemailer';
 import * as cors from 'cors';
 import * as crypto from 'crypto-js';
 import * as express from 'express';
+import { Request, Response } from 'express';
 
 // Initialize Firebase admin SDK
 admin.initializeApp();
@@ -278,7 +279,7 @@ const generateChecksum = (payload: string, saltKey: string): string => {
 };
 
 // Initialize payment
-app.post('/initializePayment', async (req, res) => {
+app.post('/initializePayment', async (req: Request, res: Response) => {
   try {
     const { amount, userId, toolId } = req.body;
 
@@ -349,7 +350,7 @@ app.post('/initializePayment', async (req, res) => {
 });
 
 // Verify payment status
-app.get('/verifyPayment', async (req, res) => {
+app.get('/verifyPayment', async (req: Request, res: Response) => {
   try {
     const { merchantTransactionId } = req.query;
 
@@ -379,7 +380,7 @@ app.get('/verifyPayment', async (req, res) => {
 });
 
 // Payment callback handler 
-app.post('/paymentCallback', async (req, res) => {
+app.post('/paymentCallback', async (req: Request, res: Response) => {
   try {
     const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
 
@@ -399,6 +400,10 @@ app.post('/paymentCallback', async (req, res) => {
     }
 
     const transactionData = transactionDoc.data();
+    if (!transactionData) {
+      return res.status(404).json({ success: false, error: 'Transaction data not found' });
+    }
+    
     const isSuccess = responseCode === 'SUCCESS' || responseCode === 'PAYMENT_SUCCESS';
 
     // Update transaction in Firestore
@@ -422,7 +427,9 @@ app.post('/paymentCallback', async (req, res) => {
     if (isSuccess) {
       try {
         // Add tool to user's collection
-        const { userId, toolId, amount } = transactionData;
+        const userId = transactionData.userId;
+        const toolId = transactionData.toolId;
+        const paymentAmount = transactionData.amount;
         
         // Add to user's purchased tools in Firestore
         await db.collection('users').doc(userId).update({
@@ -434,7 +441,7 @@ app.post('/paymentCallback', async (req, res) => {
         await db.collection('user_payments').add({
           userId,
           toolId,
-          amount,
+          amount: paymentAmount,
           paymentMethod: 'PhonePe',
           status: 'completed',
           merchantTransactionId,
@@ -446,7 +453,7 @@ app.post('/paymentCallback', async (req, res) => {
         await db.collection('admin_payments').add({
           userId,
           toolId,
-          amount,
+          amount: paymentAmount,
           paymentMethod: 'PhonePe',
           status: 'completed',
           merchantTransactionId,
@@ -462,7 +469,7 @@ app.post('/paymentCallback', async (req, res) => {
             from: functions.config().email?.user || process.env.EMAIL_USER || 'your-email@gmail.com',
             to: userDoc.data()?.email,
             subject: 'Payment Confirmation - RANKBLAZE',
-            html: emailTemplates.payment(merchantTransactionId as string, amount)
+            html: emailTemplates.payment(merchantTransactionId as string, paymentAmount)
           };
 
           await transporter.sendMail(mailOptions);
@@ -484,7 +491,7 @@ app.post('/paymentCallback', async (req, res) => {
 });
 
 // Get user tools API
-app.get('/getUserTools', async (req, res) => {
+app.get('/getUserTools', async (req: Request, res: Response) => {
   try {
     const { userId } = req.query;
     
@@ -513,4 +520,4 @@ app.get('/getUserTools', async (req, res) => {
 });
 
 // Express app as Cloud Function
-exports.api = functions.https.onRequest(app); 
+export const api = functions.https.onRequest(app); 

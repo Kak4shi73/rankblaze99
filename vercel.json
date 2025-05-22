@@ -64,6 +64,6 @@
     "PHONEPE_SALT_KEY": "c6c71ce3-b5cb-499e-a8fd-dc55208daa13",
     "PHONEPE_SALT_INDEX": "1",
     "PHONEPE_ENV": "PROD",
-    "PHONEPE_CALLBACK_URL": "https://rankblaze-138f7.web.app/payment-status"
+    "PHONEPE_CALLBACK_URL": "https://rankblaze.in/payment-status"
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -50,7 +50,7 @@ const Checkout = () => {
         // Create form and submit to PhonePe
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
+        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
         
         const payloadInput = document.createElement('input');
         payloadInput.type = 'hidden';

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { initializePhonePePayment } from '../utils/payment';
+import { CreditCard, ArrowLeft, ShoppingBag } from 'lucide-react';
 
 const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,39 +24,49 @@ const Checkout = () => {
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
+    setErrorMessage('');
     
     try {
-      // Generate a unique order ID
-      const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      
-      // Here you would integrate with your preferred payment method
-      // For now, we'll simulate a successful order
+      // Get the first tool ID from cart (we'll associate the payment with this tool)
+      const primaryToolId = cartItems[0].id;
 
-      setTimeout(() => {
-        // Clear cart
-        clearCart();
+      // Initialize PhonePe payment
+      const response = await initializePhonePePayment(
+        totalAmount,
+        user.uid,
+        primaryToolId
+      );
+
+      if (response.success) {
+        // Store cart items in session storage for reference after payment
+        sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         
-        // Redirect to success page
-        navigate('/payment-success', { 
-          state: { 
-            orderId: orderId,
-            amount: totalAmount,
-            tools: cartItems 
-          } 
-        });
-      }, 2000);
-      
+        // Create form and submit to PhonePe
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        
+        const payloadInput = document.createElement('input');
+        payloadInput.type = 'hidden';
+        payloadInput.name = 'request';
+        payloadInput.value = response.payload;
+
+        const checksumInput = document.createElement('input');
+        checksumInput.type = 'hidden';
+        checksumInput.name = 'checksum';
+        checksumInput.value = response.checksum;
+
+        form.appendChild(payloadInput);
+        form.appendChild(checksumInput);
+        document.body.appendChild(form);
+        form.submit();
+      } else {
+        throw new Error('Payment initialization failed');
+      }
     } catch (error) {
       console.error('Checkout error:', error);
       setIsProcessing(false);
       setErrorMessage('There was an error processing your payment. Please try again.');
-      
-      // Redirect to error page
-      navigate('/payment-error', { 
-        state: { 
-          paymentError: 'There was an error processing your payment. Please try again.',
-        } 
-      });
     }
   };
 
@@ -97,8 +109,16 @@ const Checkout = () => {
         <div className="bg-gray-800 rounded-lg p-6 mb-6 shadow-lg">
           <h2 className="text-xl font-semibold text-white mb-4 pb-3 border-b border-gray-700">Payment Information</h2>
           
-          <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-md mb-6">
-            Payment integration has been removed. This is a placeholder for your new payment method.
+          <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-700 mb-6">
+            <div className="flex items-center">
+              <div className="bg-indigo-600 p-2 rounded-md mr-3">
+                <ShoppingBag className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-white font-medium">Secure Payment</h3>
+                <p className="text-gray-400 text-sm">Your payment information is secure</p>
+              </div>
+            </div>
           </div>
           
           {errorMessage && (
@@ -116,7 +136,17 @@ const Checkout = () => {
                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
             }`}
           >
-            {isProcessing ? 'Processing...' : 'Place Order'}
+            {isProcessing ? (
+              <div className="flex items-center">
+                <div className="w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2"></div>
+                Processing...
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <CreditCard className="h-5 w-5 mr-2" />
+                Pay with PhonePe ₹{totalAmount}
+              </div>
+            )}
           </button>
           
           <button 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { verifyPaymentStatus } from '../utils/payment';
-import { Check, X, Loader } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { firestore } from '../config/firebase';
 import { updateDoc, doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
