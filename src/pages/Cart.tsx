@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2, X, CreditCard, Shield, CheckCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
@@ -8,183 +8,249 @@ import CurrencySelector from '../components/cart/CurrencySelector';
 import { Currency, convertCurrency, formatCurrency } from '../utils/currencyConverter';
 
 const Cart = () => {
-  const { cartItems, removeFromCart, clearCart } = useCart();
+  const { cartItems, removeFromCart, clearCart, updateQuantity } = useCart();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const { user } = useAuth();
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>('INR');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // Always reset to INR for checkout since PhonePe only works with INR
+  useEffect(() => {
+    if (isCheckingOut) {
+      setSelectedCurrency('INR');
+    }
+  }, [isCheckingOut]);
 
   const convertPrice = (price: number): number => {
     return convertCurrency(price, 'INR', selectedCurrency);
   };
 
-  const subtotal = cartItems.reduce((total, item) => total + item.price, 0);
+  const handleQuantityChange = (itemId: string, newQuantity: number) => {
+    if (newQuantity > 0) {
+      updateQuantity(itemId, newQuantity);
+    }
+  };
+
+  const subtotal = cartItems.reduce((total, item) => total + (item.price * (item.quantity || 1)), 0);
   const convertedSubtotal = convertPrice(subtotal);
   const transactionFee = convertedSubtotal * 0.022; // 2.2% transaction fee
   const gstOnFee = transactionFee * 0.18; // 18% GST on transaction fee
   const total = convertedSubtotal + transactionFee + gstOnFee;
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (!user) {
-      showToast('Please login to continue', 'error');
-      navigate('/login');
+      navigate('/login', { state: { redirectTo: '/cart' } });
+      return;
+    }
+
+    if (!termsAccepted) {
+      setErrorMessage("Please accept the terms and conditions to proceed");
       return;
     }
 
     if (cartItems.length === 0) {
-      showToast('Your cart is empty', 'error');
+      setErrorMessage("Your cart is empty");
       return;
     }
-    
+
     setIsCheckingOut(true);
-    setErrorMessage(null);
-    
-    try {
-      showToast('Redirecting to checkout...', 'info');
-      
-      // Navigate to the checkout page
-      navigate('/checkout');
-    } catch (error) {
-      console.error('Checkout error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Checkout initialization failed';
-      setErrorMessage(errorMsg);
-      showToast(errorMsg, 'error');
-      setIsCheckingOut(false);
-    }
+    navigate('/checkout');
   };
 
-  return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto p-4">
-        <h1 className="text-3xl font-bold text-white mb-8">Your Cart</h1>
-        
-        {cartItems.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg p-8 text-center">
-            <h2 className="text-2xl text-white mb-4">Your cart is empty</h2>
-            <p className="text-gray-300 mb-6">Browse our tools and add some to your cart.</p>
-            <button
-              onClick={() => navigate('/tools')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-md transition-colors"
+  if (cartItems.length === 0) {
+    return (
+      <div className="min-h-screen pt-24 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
+        <div className="container mx-auto p-4 max-w-4xl">
+          <h1 className="text-3xl font-bold text-white mb-8">Your Cart</h1>
+          
+          <div className="bg-gray-800 rounded-lg p-12 text-center shadow-lg">
+            <div className="w-24 h-24 bg-gray-700 rounded-full mx-auto mb-6 flex items-center justify-center">
+              <svg className="w-12 h-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-medium text-white mb-3">Your cart is empty</h2>
+            <p className="text-gray-400 mb-6">Looks like you haven't added any tools to your cart yet.</p>
+            <button 
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
             >
               Browse Tools
             </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-              <div className="bg-gray-800 rounded-lg overflow-hidden">
-                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-                  <h2 className="text-xl font-semibold text-white">Cart Items</h2>
-                  <button
-                    onClick={clearCart}
-                    className="text-red-400 hover:text-red-300 flex items-center"
-                  >
-                    <Trash2 size={16} className="mr-1" />
-                    Clear All
-                  </button>
-                </div>
-                
-                {cartItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 border-b border-gray-700 flex items-center justify-between"
-                  >
-                    <div className="flex-1">
-                      <h3 className="text-white font-medium">{item.name}</h3>
-                      <p className="text-gray-400 text-sm">{item.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-white font-bold">
-                        {formatCurrency(convertPrice(item.price), selectedCurrency)}
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-400 hover:text-red-300 mt-1 inline-flex items-center text-sm"
-                      >
-                        <X size={14} className="mr-1" />
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pt-24 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
+      <div className="container mx-auto p-4 max-w-6xl">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-8">
+          {/* Left column - Cart items */}
+          <div className="w-full md:w-8/12">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-bold text-white">Your Cart</h1>
+              <button
+                onClick={() => {
+                  clearCart();
+                  showToast('Cart cleared', 'success');
+                }}
+                className="text-sm text-indigo-300 hover:text-indigo-200"
+              >
+                Clear All
+              </button>
             </div>
             
-            <div className="lg:col-span-1">
-              <div className="bg-gray-800 rounded-lg overflow-hidden sticky top-24">
-                <div className="p-4 border-b border-gray-700">
-                  <h2 className="text-xl font-semibold text-white">Order Summary</h2>
+            <div className="bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+              {cartItems.map((item) => (
+                <div 
+                  key={item.id} 
+                  className="p-4 border-b border-gray-700 last:border-none flex flex-col sm:flex-row gap-4"
+                >
+                  <div className="flex-grow">
+                    <div className="flex justify-between items-start">
+                      <h3 className="text-white font-medium">{item.name}</h3>
+                      <button
+                        onClick={() => {
+                          removeFromCart(item.id);
+                          showToast(`${item.name} removed from cart`, 'success');
+                        }}
+                        className="text-gray-400 hover:text-red-400 p-1"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                    
+                    <p className="text-gray-400 text-sm mb-2">{item.description}</p>
+                    
+                    <div className="flex justify-between items-center mt-2">
+                      <div className="flex items-center">
+                        <label className="text-gray-400 mr-2 text-sm">Qty:</label>
+                        <div className="flex border border-gray-600 rounded-md">
+                          <button 
+                            className="px-2 py-1 text-gray-300 hover:bg-gray-700 rounded-l-md"
+                            onClick={() => handleQuantityChange(item.id, (item.quantity || 1) - 1)}
+                            disabled={(item.quantity || 1) <= 1}
+                          >
+                            -
+                          </button>
+                          <span className="px-3 py-1 text-white bg-gray-700">{item.quantity || 1}</span>
+                          <button 
+                            className="px-2 py-1 text-gray-300 hover:bg-gray-700 rounded-r-md"
+                            onClick={() => handleQuantityChange(item.id, (item.quantity || 1) + 1)}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-indigo-300 font-bold">
+                        {formatCurrency(item.price * (item.quantity || 1), selectedCurrency)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {/* Right column - Order summary */}
+          <div className="w-full md:w-4/12 sticky top-24">
+            <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+              <h2 className="text-xl font-bold text-white mb-4 pb-3 border-b border-gray-700">Order Summary</h2>
+              
+              <div className="mb-4">
+                <CurrencySelector 
+                  selectedCurrency={selectedCurrency}
+                  onCurrencyChange={setSelectedCurrency}
+                />
+              </div>
+              
+              <div className="space-y-3 mb-4">
+                <div className="flex justify-between text-gray-300">
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(convertedSubtotal, selectedCurrency)}</span>
+                </div>
+                <div className="flex justify-between text-gray-300">
+                  <span className="flex items-center">
+                    <span>Transaction Fee</span>
+                    <span className="text-xs ml-1">(2.2%)</span>:
+                  </span>
+                  <span>{formatCurrency(transactionFee, selectedCurrency)}</span>
+                </div>
+                <div className="flex justify-between text-gray-300">
+                  <span className="flex items-center">
+                    <span>GST</span>
+                    <span className="text-xs ml-1">(18%)</span>:
+                  </span>
+                  <span>{formatCurrency(gstOnFee, selectedCurrency)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-white pt-3 border-t border-gray-700">
+                  <span>Total:</span>
+                  <span>{formatCurrency(total, selectedCurrency)}</span>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <div className="flex items-start mb-3">
+                  <input 
+                    type="checkbox" 
+                    id="terms" 
+                    className="mr-2 mt-1" 
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                  />
+                  <label htmlFor="terms" className="text-gray-300 text-sm">
+                    I agree to the <a href="/terms" className="text-indigo-300 hover:text-indigo-200">Terms and Conditions</a> and <a href="/privacy" className="text-indigo-300 hover:text-indigo-200">Privacy Policy</a>
+                  </label>
                 </div>
                 
-                <div className="p-4">
-                  <div className="mb-2 flex justify-between">
-                    <CurrencySelector
-                      selectedCurrency={selectedCurrency}
-                      onChange={setSelectedCurrency}
-                    />
+                {errorMessage && (
+                  <div className="bg-red-900/30 border border-red-800 text-red-300 p-2 rounded-md text-sm mb-4">
+                    {errorMessage}
                   </div>
-                  
-                  <div className="mb-4 mt-6 space-y-2">
-                    <div className="flex justify-between text-gray-300">
-                      <span>Subtotal</span>
-                      <span>{formatCurrency(convertedSubtotal, selectedCurrency)}</span>
+                )}
+              </div>
+              
+              <div className="space-y-4">
+                <button
+                  onClick={handleCheckout}
+                  disabled={isCheckingOut || !termsAccepted || cartItems.length === 0}
+                  className={`w-full py-3 rounded-md font-semibold flex items-center justify-center 
+                    ${isCheckingOut || !termsAccepted
+                      ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+                >
+                  {isCheckingOut ? (
+                    <div className="flex items-center">
+                      <div className="w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Processing...
                     </div>
-                    <div className="flex justify-between text-gray-300">
-                      <span>Transaction Fee (2.2%)</span>
-                      <span>{formatCurrency(transactionFee, selectedCurrency)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-300">
-                      <span>GST on Fee (18%)</span>
-                      <span>{formatCurrency(gstOnFee, selectedCurrency)}</span>
-                    </div>
-                    <div className="border-t border-gray-700 pt-2 mt-2 flex justify-between font-bold text-white">
-                      <span>Total</span>
-                      <span>{formatCurrency(total, selectedCurrency)}</span>
-                    </div>
-                  </div>
-                  
-                  {errorMessage && (
-                    <div className="bg-red-900/30 border border-red-800 text-red-300 p-3 rounded-md mb-4 text-sm">
-                      {errorMessage}
+                  ) : (
+                    <div className="flex items-center">
+                      <CreditCard className="h-5 w-5 mr-2" />
+                      Proceed to Checkout
                     </div>
                   )}
-                  
-                  <button
-                    onClick={handleCheckout}
-                    disabled={isCheckingOut || cartItems.length === 0}
-                    className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center ${
-                      isCheckingOut || cartItems.length === 0
-                        ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                    }`}
-                  >
-                    {isCheckingOut ? (
-                      'Processing...'
-                    ) : (
-                      <>
-                        <CreditCard size={18} className="mr-2" />
-                        Proceed to Checkout
-                      </>
-                    )}
-                  </button>
-                  
-                  <div className="mt-4 text-center text-sm text-gray-400">
-                    <div className="flex items-center justify-center mb-1">
-                      <Shield size={14} className="mr-1 text-green-400" />
-                      <span>Secure Checkout</span>
-                    </div>
-                    <div className="flex items-center justify-center">
-                      <CheckCircle size={14} className="mr-1 text-green-400" />
-                      <span>Satisfaction Guaranteed</span>
-                    </div>
+                </button>
+                
+                <div className="flex items-center justify-center space-x-4 text-xs text-gray-400">
+                  <div className="flex items-center">
+                    <Shield className="h-3.5 w-3.5 mr-1" />
+                    Secure Checkout
+                  </div>
+                  <div className="flex items-center">
+                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                    Instant Access
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

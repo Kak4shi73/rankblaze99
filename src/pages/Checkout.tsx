@@ -1,17 +1,26 @@
-```typescript
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { initializePhonePePayment } from '../utils/payment';
-import { CreditCard, ArrowLeft } from 'lucide-react';
+import { CreditCard, ArrowLeft, ShoppingBag } from 'lucide-react';
 
 const Checkout = () => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { cartItems, getTotalPrice, clearCart } = useCart();
   const totalAmount = getTotalPrice();
+
+  // Redirect if no user or empty cart
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+    } else if (!cartItems.length) {
+      navigate('/cart');
+    }
+  }, [user, cartItems, navigate]);
 
   const handlePlaceOrder = async () => {
     if (!user || !cartItems.length) {
@@ -20,21 +29,28 @@ const Checkout = () => {
     }
 
     setIsProcessing(true);
+    setErrorMessage(null);
 
     try {
-      // Initialize payment for first item in cart
-      const item = cartItems[0];
+      // Get the first tool ID from cart (we'll associate the payment with this tool)
+      // In case of multiple tools, we'll handle the assignment in the backend
+      const primaryToolId = cartItems[0].id;
+
+      // Initialize payment using the total cart amount
       const response = await initializePhonePePayment(
-        item.price,
-        user.id,
-        item.id
+        totalAmount,
+        user.uid,
+        primaryToolId
       );
 
       if (response.success) {
+        // Store cart items in session storage for reference after payment
+        sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
+        
         // Create form and submit to PhonePe
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
         
         const payloadInput = document.createElement('input');
         payloadInput.type = 'hidden';
@@ -56,17 +72,17 @@ const Checkout = () => {
     } catch (error) {
       console.error('Payment error:', error);
       setIsProcessing(false);
+      setErrorMessage(error instanceof Error ? error.message : 'Payment initialization failed');
     }
   };
 
-  if (!user) {
-    navigate('/login');
-    return null;
+  if (!user || !cartItems.length) {
+    return null; // Will be redirected by useEffect
   }
 
   return (
     <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto px-6 py-8">
+      <div className="container mx-auto px-4 py-8">
         <button
           onClick={() => navigate('/cart')}
           className="flex items-center text-indigo-300 hover:text-indigo-200 mb-8"
@@ -76,7 +92,7 @@ const Checkout = () => {
         </button>
 
         <div className="max-w-2xl mx-auto">
-          <div className="bg-gray-800 rounded-lg p-6 mb-8">
+          <div className="bg-gray-800 rounded-lg p-6 mb-8 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Order Summary</h2>
             
             {cartItems.map((item) => (
@@ -85,7 +101,7 @@ const Checkout = () => {
                   <h3 className="text-white">{item.name}</h3>
                   <p className="text-gray-400">Quantity: {item.quantity || 1}</p>
                 </div>
-                <div className="text-white font-bold">₹{item.price}</div>
+                <div className="text-white font-bold">₹{item.price * (item.quantity || 1)}</div>
               </div>
             ))}
 
@@ -105,27 +121,49 @@ const Checkout = () => {
             </div>
           </div>
 
-          <div className="bg-gray-800 rounded-lg p-6">
+          <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
             <h2 className="text-2xl font-bold text-white mb-6">Payment Information</h2>
             
-            <button
-              onClick={handlePlaceOrder}
-              disabled={isProcessing}
-              className={`w-full flex items-center justify-center py-4 px-6 rounded-lg font-medium transition-all duration-300 ${
-                isProcessing
-                  ? 'bg-indigo-800 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700'
-              } text-white`}
-            >
-              {isProcessing ? (
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <CreditCard className="h-5 w-5 mr-2" />
-                  Pay with PhonePe
-                </>
-              )}
-            </button>
+            {errorMessage && (
+              <div className="bg-red-900/30 border border-red-800 text-red-300 p-4 rounded-md mb-6">
+                {errorMessage}
+              </div>
+            )}
+            
+            <div className="space-y-6">
+              <div className="bg-gray-700/50 p-4 rounded-lg border border-gray-700">
+                <div className="flex items-center">
+                  <div className="bg-indigo-600 p-2 rounded-md mr-3">
+                    <ShoppingBag className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-medium">Secure Payment</h3>
+                    <p className="text-gray-400 text-sm">Your payment information is secure</p>
+                  </div>
+                </div>
+              </div>
+              
+              <button
+                onClick={handlePlaceOrder}
+                disabled={isProcessing}
+                className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center
+                  ${isProcessing 
+                    ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed' 
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+              >
+                {isProcessing ? (
+                  <div className="flex items-center">
+                    <div className="w-5 h-5 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Pay with PhonePe ₹{totalAmount}
+                  </div>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -134,4 +172,3 @@ const Checkout = () => {
 };
 
 export default Checkout;
-```

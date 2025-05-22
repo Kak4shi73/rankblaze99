@@ -1,6 +1,9 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import * as nodemailer from 'nodemailer';
+import * as cors from 'cors';
+import * as crypto from 'crypto-js';
+import * as express from 'express';
 
 // Initialize Firebase admin SDK
 admin.initializeApp();
@@ -30,6 +33,26 @@ const emailTemplates = {
       
       <div style="color: #999; font-size: 14px; text-align: center; margin-top: 30px;">
         <p>If you didn't request this code, you can safely ignore this email.</p>
+        <p>© ${new Date().getFullYear()} RANKBLAZE. All rights reserved.</p>
+      </div>
+    </div>
+  `,
+  payment: (orderId: string, amount: number) => `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background-color: #f9f9f9;">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #5c4ad1; font-weight: bold; margin-bottom: 5px;">Payment Successful</h1>
+        <p style="color: #777; font-size: 16px;">Your payment has been successfully processed</p>
+      </div>
+      
+      <div style="background-color: #ffffff; border-radius: 8px; padding: 20px; text-align: left; border: 1px solid #e0e0e0; margin-bottom: 30px;">
+        <p style="margin: 5px 0;"><strong>Order ID:</strong> ${orderId}</p>
+        <p style="margin: 5px 0;"><strong>Amount:</strong> ₹${amount}</p>
+        <p style="margin: 5px 0;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+        <p style="margin: 15px 0 5px;">Your tool access has been activated. You can now start using the tools you purchased.</p>
+      </div>
+      
+      <div style="color: #999; font-size: 14px; text-align: center; margin-top: 30px;">
+        <p>Thank you for your purchase!</p>
         <p>© ${new Date().getFullYear()} RANKBLAZE. All rights reserved.</p>
       </div>
     </div>
@@ -230,4 +253,264 @@ export const getToolSession = functions.https.onCall(
       );
     }
   }
-); 
+);
+
+// Set up express app for API endpoints
+const app = express();
+
+// Middleware
+app.use(cors({ origin: true }));
+app.use(express.json());
+
+// PhonePe configuration
+const PHONEPE_CONFIG = {
+  merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'RANKBLAZEONLINE',
+  saltKey: functions.config().phonepe?.salt_key || process.env.PHONEPE_SALT_KEY || 'c6c71ce3-b5cb-499e-a8fd-dc55208daa13',
+  saltIndex: functions.config().phonepe?.salt_index || process.env.PHONEPE_SALT_INDEX || '1',
+  environment: functions.config().phonepe?.env || process.env.PHONEPE_ENV || 'PROD',
+  callbackUrl: functions.config().phonepe?.callback_url || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze-138f7.web.app/payment-status'
+};
+
+// Helper function to generate SHA256 checksum
+const generateChecksum = (payload: string, saltKey: string): string => {
+  const string = payload + '/pg/v1/pay' + saltKey;
+  return crypto.SHA256(string).toString(crypto.enc.Base64);
+};
+
+// Initialize payment
+app.post('/initializePayment', async (req, res) => {
+  try {
+    const { amount, userId, toolId } = req.body;
+
+    if (!amount || !userId || !toolId) {
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    // Create a unique merchant transaction ID
+    const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    
+    // Save transaction details in Firebase
+    const db = admin.firestore();
+    await db.collection('transactions').doc(merchantTransactionId).set({
+      userId,
+      toolId,
+      amount,
+      status: 'initiated',
+      merchantTransactionId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Create PhonePe payload
+    const payloadData = {
+      merchantId: PHONEPE_CONFIG.merchantId,
+      merchantTransactionId,
+      merchantUserId: userId,
+      amount: amount * 100, // Convert to paise
+      redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+      redirectMode: 'REDIRECT',
+      callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+      mobileNumber: '9999999999', // Optional, can be removed or made dynamic
+      paymentInstrument: {
+        type: 'PAY_PAGE'
+      }
+    };
+
+    const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
+    const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
+
+    // PhonePe API request format
+    const requestData = {
+      request: base64Payload
+    };
+
+    // Save data needed for verification in Realtime Database for faster access
+    const rtdb = admin.database();
+    await rtdb.ref(`transactions/${merchantTransactionId}`).set({
+      status: 'initiated',
+      amount,
+      userId,
+      toolId,
+      createdAt: Date.now(),
+      checksum,
+      payload: base64Payload
+    });
+
+    return res.status(200).json({
+      success: true,
+      payload: base64Payload,
+      checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
+      merchantTransactionId
+    });
+  } catch (error) {
+    console.error('Error initializing payment:', error);
+    return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+  }
+});
+
+// Verify payment status
+app.get('/verifyPayment', async (req, res) => {
+  try {
+    const { merchantTransactionId } = req.query;
+
+    if (!merchantTransactionId) {
+      return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
+    }
+
+    // Fetch transaction from Firestore
+    const db = admin.firestore();
+    const transactionDoc = await db.collection('transactions').doc(merchantTransactionId as string).get();
+
+    if (!transactionDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+
+    const transactionData = transactionDoc.data();
+
+    return res.status(200).json({
+      success: true,
+      status: transactionData?.status || 'unknown',
+      transactionId: merchantTransactionId
+    });
+  } catch (error) {
+    console.error('Error verifying payment:', error);
+    return res.status(500).json({ success: false, error: 'Payment verification failed' });
+  }
+});
+
+// Payment callback handler 
+app.post('/paymentCallback', async (req, res) => {
+  try {
+    const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
+
+    if (!merchantTransactionId || !transactionId || !responseCode) {
+      console.error('Missing required parameters in callback:', req.body);
+      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    }
+
+    // Get transaction from Firestore
+    const db = admin.firestore();
+    const transactionRef = db.collection('transactions').doc(merchantTransactionId);
+    const transactionDoc = await transactionRef.get();
+
+    if (!transactionDoc.exists) {
+      console.error('Transaction not found:', merchantTransactionId);
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+
+    const transactionData = transactionDoc.data();
+    const isSuccess = responseCode === 'SUCCESS' || responseCode === 'PAYMENT_SUCCESS';
+
+    // Update transaction in Firestore
+    await transactionRef.update({
+      status: isSuccess ? 'completed' : 'failed',
+      responseCode,
+      transactionId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update Realtime DB for faster access
+    const rtdb = admin.database();
+    await rtdb.ref(`transactions/${merchantTransactionId}`).update({
+      status: isSuccess ? 'completed' : 'failed',
+      responseCode,
+      transactionId,
+      updatedAt: Date.now()
+    });
+
+    // Process the successful payment
+    if (isSuccess) {
+      try {
+        // Add tool to user's collection
+        const { userId, toolId, amount } = transactionData;
+        
+        // Add to user's purchased tools in Firestore
+        await db.collection('users').doc(userId).update({
+          tools: admin.firestore.FieldValue.arrayUnion(toolId),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Create a payment record
+        await db.collection('user_payments').add({
+          userId,
+          toolId,
+          amount,
+          paymentMethod: 'PhonePe',
+          status: 'completed',
+          merchantTransactionId,
+          transactionId,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Add to admin payments collection for analytics
+        await db.collection('admin_payments').add({
+          userId,
+          toolId,
+          amount,
+          paymentMethod: 'PhonePe',
+          status: 'completed',
+          merchantTransactionId,
+          transactionId, 
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Find user email to send confirmation
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists && userDoc.data()?.email) {
+          // Send payment confirmation email
+          const mailOptions = {
+            from: functions.config().email?.user || process.env.EMAIL_USER || 'your-email@gmail.com',
+            to: userDoc.data()?.email,
+            subject: 'Payment Confirmation - RANKBLAZE',
+            html: emailTemplates.payment(merchantTransactionId as string, amount)
+          };
+
+          await transporter.sendMail(mailOptions);
+        }
+      } catch (error) {
+        console.error('Error processing successful payment:', error);
+        // We'll still return success since the payment itself was successful
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: isSuccess ? 'completed' : 'failed'
+    });
+  } catch (error) {
+    console.error('Error in payment callback:', error);
+    return res.status(500).json({ success: false, error: 'Payment callback processing failed' });
+  }
+});
+
+// Get user tools API
+app.get('/getUserTools', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'Missing userId' });
+    }
+    
+    // Get user from Firestore
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(userId as string).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    // Return user's tools
+    const userData = userDoc.data();
+    return res.status(200).json({
+      success: true,
+      tools: userData?.tools || []
+    });
+  } catch (error) {
+    console.error('Error getting user tools:', error);
+    return res.status(500).json({ success: false, error: 'Failed to get user tools' });
+  }
+});
+
+// Express app as Cloud Function
+exports.api = functions.https.onRequest(app); 
