@@ -13,10 +13,15 @@ const app = express();
 
 // Updated CORS middleware with expanded methods and headers
 app.use(cors({
-  origin: ["https://www.rankblaze.in", "https://rankblaze.in", "http://localhost:3000", "http://localhost:5000"],
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-  credentials: true,
+  origin: [
+    'https://rankblaze.in',
+    'https://www.rankblaze.in',
+    'http://localhost:3000',
+    'http://localhost:5000'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-VERIFY'],
+  credentials: true
 }));
 
 app.use(express.json());
