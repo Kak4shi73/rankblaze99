@@ -259,33 +259,23 @@ export const getToolSession = functions.https.onCall(
 // Set up express app for API endpoints
 const app = express();
 
-// Configure CORS 
-const corsMiddleware = cors({
-  origin: true, // Automatically reflect the request origin
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-VERIFY']
-});
-
-// Apply CORS to all routes
-app.use(corsMiddleware);
-app.use(express.json());
-
-// Add headers to handle Cross-Origin policies
+// Simple CORS middleware that works for all routes
 app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-VERIFY');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return res.status(204).end();
+    return res.status(204).send('');
   }
   
   next();
 });
 
-// Wrap all routes with CORS middleware
-app.options('*', corsMiddleware);
+// Enable JSON parsing
+app.use(express.json());
 
 // PhonePe configuration
 const PHONEPE_CONFIG = {
@@ -303,14 +293,11 @@ const generateChecksum = (payload: string, saltKey: string): string => {
 };
 
 // Initialize payment
-app.post('/initializePayment', corsMiddleware, async (req: Request, res: Response) => {
+app.post('/initializePayment', async (req: Request, res: Response) => {
+  // Handle CORS for this specific endpoint
+  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
+  
   try {
-    // Set CORS headers directly
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
     const { amount, userId, toolId } = req.body;
 
     if (!amount || !userId || !toolId) {
@@ -380,14 +367,11 @@ app.post('/initializePayment', corsMiddleware, async (req: Request, res: Respons
 });
 
 // Verify payment status
-app.get('/verifyPayment', corsMiddleware, async (req: Request, res: Response) => {
+app.get('/verifyPayment', async (req: Request, res: Response) => {
+  // Handle CORS for this specific endpoint
+  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
+  
   try {
-    // Set CORS headers directly
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
     const { merchantTransactionId } = req.query;
 
     if (!merchantTransactionId) {
@@ -416,14 +400,11 @@ app.get('/verifyPayment', corsMiddleware, async (req: Request, res: Response) =>
 });
 
 // Payment callback handler 
-app.post('/paymentCallback', corsMiddleware, async (req: Request, res: Response) => {
+app.post('/paymentCallback', async (req: Request, res: Response) => {
+  // Handle CORS for this specific endpoint
+  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
+  
   try {
-    // Set CORS headers directly
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || 'https://www.rankblaze.in');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
     const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
 
     if (!merchantTransactionId || !transactionId || !responseCode) {
@@ -562,30 +543,13 @@ app.get('/getUserTools', async (req: Request, res: Response) => {
 });
 
 // Add a simple CORS test endpoint
-app.get('/cors-test', corsMiddleware, (req, res) => {
-  // Set CORS headers directly for maximum compatibility
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  return res.status(200).json({ 
+app.get('/cors-test', (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://www.rankblaze.in');
+  res.status(200).json({ 
     success: true, 
     message: 'CORS is working!',
     origin: req.headers.origin || 'unknown'
   });
-});
-
-// Ensure all unhandled routes also work with CORS
-app.all('*', corsMiddleware, (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-VERIFY');
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  
-  return res.status(404).json({ success: false, error: 'Route not found' });
 });
 
 // Export the Express app as a Cloud Function

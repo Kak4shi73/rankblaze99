@@ -30,12 +30,15 @@ export const initializePhonePePayment = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Origin': window.location.origin
       },
       body: JSON.stringify({
         amount,
         userId,
         toolId,
       }),
+      credentials: 'include',
+      mode: 'cors'
     });
 
     const data = await response.json();
