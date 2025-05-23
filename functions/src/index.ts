@@ -300,6 +300,9 @@ app.post('/initializePayment', async (req: Request, res: Response) => {
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    res.set("Access-Control-Allow-Credentials", "true");
     return res.status(204).send(""); // No content
   }
 
