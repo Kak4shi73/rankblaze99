@@ -637,4 +637,20 @@ app.get('/cors-test', (req: Request, res: Response) => {
 });
 
 // Export the Express app as a Cloud Function
-export const api = functions.https.onRequest(app); 
+export const api = functions.https.onRequest(app);
+
+// Import PhonePe payment functions
+import { 
+  initializePhonePePayment, 
+  verifyPhonePePayment, 
+  phonePeCallback,
+  createPhonePeSdkOrder 
+} from './phone-pe-payment';
+
+// Export PhonePe payment functions
+export { 
+  initializePhonePePayment, 
+  verifyPhonePePayment, 
+  phonePeCallback,
+  createPhonePeSdkOrder 
+}; 

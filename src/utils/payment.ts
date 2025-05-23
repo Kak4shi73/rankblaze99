@@ -7,10 +7,10 @@ const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net/api
 
 interface PaymentInitResponse {
   success: boolean;
-  payload: string;
-  checksum: string;
-  merchantTransactionId: string;
+  checkoutUrl?: string;
+  merchantTransactionId?: string;
   error?: string;
+  token?: string; // For SDK integration
 }
 
 /**
@@ -27,7 +27,7 @@ export const initializePhonePePayment = async (
 ): Promise<PaymentInitResponse> => {
   try {
     // Call the backend API to initialize the payment
-    const response = await fetch(`${API_BASE_URL}/initializePayment`, {
+    const response = await fetch(`${API_BASE_URL}/initializePhonePePayment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -46,9 +46,6 @@ export const initializePhonePePayment = async (
       console.error('Payment API error:', errorText);
       return {
         success: false,
-        payload: '',
-        checksum: '',
-        merchantTransactionId: '',
         error: `Payment failed with status code ${response.status}: ${errorText}`
       };
     }
@@ -58,21 +55,79 @@ export const initializePhonePePayment = async (
     if (!data.success) {
       return {
         success: false,
-        payload: '',
-        checksum: '',
-        merchantTransactionId: '',
         error: data.error || 'Failed to initialize payment'
       };
     }
     
-    return data;
+    return {
+      success: true,
+      checkoutUrl: data.checkoutUrl,
+      merchantTransactionId: data.merchantTransactionId,
+    };
   } catch (error) {
     console.error('Error in payment initialization:', error);
     return {
       success: false,
-      payload: '',
-      checksum: '',
-      merchantTransactionId: '',
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+};
+
+/**
+ * Initialize a PhonePe SDK payment for frontend integration
+ * @param amount - The payment amount in INR
+ * @param userId - The user ID
+ * @param toolId - The tool ID
+ * @returns Promise with payment initialization response including SDK token
+ */
+export const initializePhonePeSdkPayment = async (
+  amount: number,
+  userId: string,
+  toolId: string
+): Promise<PaymentInitResponse> => {
+  try {
+    // Call the backend API to initialize the payment
+    const response = await fetch(`${API_BASE_URL}/createPhonePeSdkOrder`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount,
+        userId,
+        toolId,
+      }),
+      credentials: 'include',
+      mode: 'cors'
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SDK Payment API error:', errorText);
+      return {
+        success: false,
+        error: `SDK Payment failed with status code ${response.status}: ${errorText}`
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      return {
+        success: false,
+        error: data.error || 'Failed to initialize SDK payment'
+      };
+    }
+    
+    return {
+      success: true,
+      token: data.token,
+      merchantTransactionId: data.merchantOrderId,
+    };
+  } catch (error) {
+    console.error('Error in SDK payment initialization:', error);
+    return {
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
   }
@@ -83,11 +138,11 @@ export const initializePhonePePayment = async (
  * @param merchantTransactionId - The merchant transaction ID
  * @returns Promise with payment verification result
  */
-export const verifyPaymentStatus = async (merchantTransactionId: string): Promise<boolean> => {
+export const verifyPaymentStatus = async (merchantTransactionId: string): Promise<{success: boolean, state?: string, error?: string}> => {
   try {
     // Call the backend API to verify the payment
     const response = await fetch(
-      `${API_BASE_URL}/verifyPayment?merchantTransactionId=${merchantTransactionId}`,
+      `${API_BASE_URL}/verifyPhonePePayment?merchantOrderId=${merchantTransactionId}`,
       {
         method: 'GET',
         headers: {
@@ -98,16 +153,33 @@ export const verifyPaymentStatus = async (merchantTransactionId: string): Promis
       }
     );
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      return {
+        success: false,
+        error: `Verification failed with status code ${response.status}: ${errorText}`
+      };
+    }
+
     const data = await response.json();
 
     if (!data.success) {
-      throw new Error(data.error || 'Failed to verify payment');
+      return {
+        success: false,
+        error: data.error || 'Failed to verify payment'
+      };
     }
 
-    return data.status === 'completed';
+    return {
+      success: true,
+      state: data.state
+    };
   } catch (error) {
     console.error('Error verifying payment:', error);
-    return false;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
   }
 };
 
