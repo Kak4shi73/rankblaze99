@@ -24,6 +24,7 @@ export const initializePhonePePayment = async (
   userId: string,
   toolId: string
 ): Promise<{ success: boolean; payload?: string; checksum?: string; merchantTransactionId?: string; error?: string }> => {
+  console.log("🟢 Starting PhonePe payment...", { amount, userId, toolId });
   try {
     console.log('=== PAYMENT UTILITY DEBUG START ===');
     // Validate input parameters

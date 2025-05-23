@@ -25,7 +25,45 @@ const Checkout = () => {
     }
   }, [user, cartItems, navigate]);
 
+  // Test API connectivity
+  React.useEffect(() => {
+    console.log("🔄 Testing API connectivity...");
+    fetch('https://us-central1-rankblaze-138f7.cloudfunctions.net/api/cors-test')
+      .then(res => res.json())
+      .then(data => console.log('✅ API Connected:', data))
+      .catch(err => console.error('❌ API Error:', err));
+      
+    // Test payment endpoint specifically
+    console.log("🔄 Testing payment endpoint...");
+    fetch('https://us-central1-rankblaze-138f7.cloudfunctions.net/api/initializePayment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: 1,
+        userId: 'test-user',
+        toolId: 'test-tool',
+      }),
+    })
+      .then(res => {
+        console.log('✅ Payment API status:', res.status);
+        return res.text();
+      })
+      .then(text => {
+        console.log('✅ Payment API response:', text);
+        try {
+          const json = JSON.parse(text);
+          console.log('✅ Payment API parsed:', json);
+        } catch (e) {
+          console.error('❌ Payment API parse error:', e);
+        }
+      })
+      .catch(err => console.error('❌ Payment API Error:', err));
+  }, []);
+
   const handlePlaceOrder = async () => {
+    console.log("🟠 Pay button clicked");
     setIsProcessing(true);
     setErrorMessage(null);
     
