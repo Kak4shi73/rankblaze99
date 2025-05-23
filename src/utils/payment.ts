@@ -26,6 +26,8 @@ export const initializePhonePePayment = async (
   toolId: string
 ): Promise<PaymentInitResponse> => {
   try {
+    console.log(`Making request to ${API_BASE_URL}/initializePhonePePayment`);
+    
     // Call the backend API to initialize the payment
     const response = await fetch(`${API_BASE_URL}/initializePhonePePayment`, {
       method: 'POST',
@@ -41,6 +43,10 @@ export const initializePhonePePayment = async (
       mode: 'cors'
     });
     
+    // Log complete response for debugging
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+    
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Payment API error:', errorText);
@@ -50,7 +56,23 @@ export const initializePhonePePayment = async (
       };
     }
     
-    const data = await response.json();
+    // Get the full response as text first for debugging
+    const responseText = await response.text();
+    console.log('Raw response:', responseText);
+    
+    // Parse the JSON response
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing JSON response:', parseError);
+      return {
+        success: false,
+        error: 'Invalid JSON response from server'
+      };
+    }
+    
+    console.log('Parsed response data:', data);
     
     if (!data.success) {
       return {

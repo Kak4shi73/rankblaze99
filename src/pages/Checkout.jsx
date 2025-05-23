@@ -70,38 +70,13 @@ const Checkout = () => {
       
       console.log("📱 PhonePe Response:", response);
 
-      if (response.success && response.payload && response.checksum && response.merchantTransactionId) {
+      if (response.success && response.checkoutUrl) {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         
-        // Going back to form submission to avoid CORS issues
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
-        
-        // Base64 encoded request payload
-        const payloadInput = document.createElement('input');
-        payloadInput.type = 'hidden';
-        payloadInput.name = 'request';
-        payloadInput.value = response.payload;
-        
-        form.appendChild(payloadInput);
-        
-        // Log what we're submitting
-        console.log("📤 Submitting form to PhonePe with payload:", response.payload);
-        console.log("📤 Merchant ID should be: M22QF2VXZLOE8");
-        
-        // Decode payload for debugging
-        try {
-          const decodedPayload = JSON.parse(atob(response.payload));
-          console.log("Decoded payload:", decodedPayload);
-        } catch (e) {
-          console.error("Could not decode payload:", e);
-        }
-        
-        // Append form to body and submit
-        document.body.appendChild(form);
-        form.submit();
+        // Redirect to PhonePe checkout page
+        console.log("🔄 Redirecting to:", response.checkoutUrl);
+        window.location.href = response.checkoutUrl;
       } else {
         throw new Error(response.error || 'Payment initialization failed');
       }
