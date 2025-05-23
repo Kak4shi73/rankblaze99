@@ -21,19 +21,11 @@ interface Tool {
 }
 
 const Tools = () => {
-  // List of tools to hide
-  const toolsToHide = [
-    "LinkedIn Learning",
-    "Netflix Premium",
-    "YouTube Premium",
-    "Spotify Premium",
-    "Canva Pro",
-    "ChatGPT Plus",
-    "Grammarly"
-  ];
+  // List of tools to hide - removed previously hidden tools
+  const toolsToHide: string[] = [];
 
   // Get tools and filter out the ones we want to hide
-  const allTools = toolsData ? toolsData.filter(tool => !toolsToHide.includes(tool.name)) : [];
+  const allTools = toolsData ? toolsData.filter(tool => !toolsToHide.includes(tool.name) && !tool.hidden) : [];
   const { addToCart, isInCart } = useCart();
   const { showToast } = useToast();
   const { isAuthenticated } = useAuth();
