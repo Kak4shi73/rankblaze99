@@ -8,6 +8,38 @@ const cors = require('cors')({
   credentials: true
 });
 
+// Express for API routes
+const express = require('express');
+const app = express();
+
+// Use cors middleware
+app.use(cors);
+
+// PhonePe webhook endpoint
+app.post('/webhook/phonepe', (req, res) => {
+  // Forward the request to the phonePeCallback function
+  return mainFunctions.phonePeCallback(req, res);
+});
+
+// Add PhonePe payment routes
+app.post('/initializePhonePePayment', (req, res) => {
+  // Forward the request to the standalone function
+  return mainFunctions.initializePhonePePayment(req, res);
+});
+
+app.get('/verifyPhonePePayment', (req, res) => {
+  // Forward the request to the standalone function
+  return mainFunctions.verifyPhonePePayment(req, res);
+});
+
+app.post('/createPhonePeSdkOrder', (req, res) => {
+  // Forward the request to the standalone function
+  return mainFunctions.createPhonePeSdkOrder(req, res);
+});
+
+// API endpoint for all routes
+exports.api = functions.https.onRequest(app);
+
 exports.paymentExample = functions.https.onRequest(async (req, res) => {
   // Use the corsHandler middleware
   return cors(req, res, async () => {
@@ -57,6 +89,7 @@ exports.corsTest = functions.https.onRequest(async (req, res) => {
 // Export all functions
 module.exports = {
   ...mainFunctions,
+  api: exports.api,
   paymentExample: exports.paymentExample,
   corsTest: exports.corsTest
 };

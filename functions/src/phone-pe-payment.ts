@@ -23,21 +23,24 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
-    return res.status(204).send("");
+    res.status(204).send("");
+    return;
   }
 
   if (req.method !== "POST") {
-    return res.status(405).send("Method Not Allowed");
+    res.status(405).send("Method Not Allowed");
+    return;
   }
 
   try {
     const { amount, userId, toolId } = req.body;
 
     if (!amount || !userId || !toolId) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: "Missing required parameters",
       });
+      return;
     }
 
     const client = getPhonePeClient();
@@ -52,17 +55,19 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
     
     const response = await client.pay(request);
     
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       checkoutUrl: response.redirectUrl,
       merchantTransactionId: merchantOrderId,
     });
+    return;
   } catch (error) {
     console.error("Error in initializePhonePePayment:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Internal Server Error",
     });
+    return;
   }
 });
 
@@ -76,51 +81,77 @@ export const verifyPhonePePayment = functions.https.onRequest(async (req, res) =
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
-    return res.status(204).send("");
+    res.status(204).send("");
+    return;
   }
 
   if (req.method !== "GET") {
-    return res.status(405).send("Method Not Allowed");
+    res.status(405).send("Method Not Allowed");
+    return;
   }
 
   try {
     const { merchantOrderId } = req.query;
 
     if (!merchantOrderId) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: "Missing merchantOrderId",
       });
+      return;
     }
 
     const client = getPhonePeClient();
     const response = await client.getOrderStatus(merchantOrderId as string);
     
-    return res.status(200).json({
+    // Access properties using type assertion
+    const responseAny = response as any;
+    
+    res.status(200).json({
       success: true,
       state: response.state,
-      code: response.code,
-      message: response.message,
+      code: responseAny.code || undefined,
+      message: responseAny.message || undefined,
     });
+    return;
   } catch (error) {
     console.error("Error in verifyPhonePePayment:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Internal Server Error",
     });
+    return;
   }
 });
 
 // Webhook to handle PhonePe callbacks
 export const phonePeCallback = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers to allow PhonePe servers
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
+  
+  console.log("Received PhonePe Webhook:", req.body);
+  
   try {
     const client = getPhonePeClient();
     const authorizationHeader = req.headers.authorization as string;
     const callbackBody = JSON.stringify(req.body);
     
-    // PhonePe callback authentication configuration
-    const username = process.env.PHONEPE_CALLBACK_USERNAME || functions.config().phonepe?.callback_username || "";
-    const password = process.env.PHONEPE_CALLBACK_PASSWORD || functions.config().phonepe?.callback_password || "";
+    // PhonePe callback authentication configuration using the new credentials
+    const username = "aryan8009"; // Username from dashboard
+    const password = "Aryan7071"; // Password from dashboard
     
     try {
       const callbackResponse = client.validateCallback(
@@ -132,18 +163,88 @@ export const phonePeCallback = functions.https.onRequest(async (req, res) => {
       
       const orderId = callbackResponse.payload.orderId;
       const state = callbackResponse.payload.state;
+      // Use optional chaining for potentially missing properties
+      const code = (callbackResponse.payload as any).code || 'unknown';
+      // Use type assertion for the event property
+      const eventType = (callbackResponse as any).event || req.body.event || 'unknown';
       
-      // Process the payment status update in your database
-      // This depends on your database structure
+      console.log(`PhonePe Webhook: Event=${eventType}, OrderID=${orderId}, State=${state}, Code=${code}`);
       
-      return res.status(200).send("OK");
+      // Handle different event types
+      if (eventType === 'pg.order.completed') {
+        // Transaction was completed successfully
+        // Parse the orderId to get userId and toolId
+        // Format: ord_userId_toolId_timestamp
+        const orderParts = orderId.split('_');
+        if (orderParts.length >= 4 && orderParts[0] === 'ord') {
+          const userId = orderParts[1];
+          const toolId = orderParts[2];
+          
+          // Import Firebase admin if needed
+          const admin = require('firebase-admin');
+          
+          // Update user's profile with purchased tool
+          await admin.firestore().collection('users').doc(userId).update({
+            tools: admin.firestore.FieldValue.arrayUnion(toolId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          
+          // Create payment record
+          await admin.firestore().collection('user_payments').doc(`${userId}_${orderId}`).set({
+            userId,
+            toolId,
+            orderId,
+            status: 'completed',
+            event: eventType,
+            state,
+            code,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      } else if (eventType === 'pg.refund.failed') {
+        // Handle refund failure
+        // Log and store the event
+        const admin = require('firebase-admin');
+        await admin.firestore().collection('payment_events').add({
+          type: eventType,
+          orderId,
+          state,
+          code,
+          payload: callbackResponse.payload,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else if (eventType === 'subscription.notification.failed' ||
+                eventType === 'subscription.paused' ||
+                eventType === 'subscription.redemption.transaction.completed' ||
+                eventType === 'payment.dispute.under_review' ||
+                eventType === 'payment.dispute.lost' ||
+                eventType === 'subscription.redemption.order.completed' ||
+                eventType === 'paylink.order.completed' ||
+                eventType === 'settlement.attempt.failed') {
+        // Handle other events
+        const admin = require('firebase-admin');
+        await admin.firestore().collection('payment_events').add({
+          type: eventType,
+          orderId,
+          state,
+          code,
+          payload: callbackResponse.payload,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      
+      // Always respond with 200 OK quickly to PhonePe
+      res.status(200).send("OK");
+      return;
     } catch (error) {
       console.error("Invalid callback:", error);
-      return res.status(401).send("Unauthorized");
+      res.status(401).send("Unauthorized");
+      return;
     }
   } catch (error) {
     console.error("Error processing callback:", error);
-    return res.status(500).send("Internal Server Error");
+    res.status(500).send("Internal Server Error");
+    return;
   }
 });
 
@@ -157,21 +258,24 @@ export const createPhonePeSdkOrder = functions.https.onRequest(async (req, res) 
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
-    return res.status(204).send("");
+    res.status(204).send("");
+    return;
   }
 
   if (req.method !== "POST") {
-    return res.status(405).send("Method Not Allowed");
+    res.status(405).send("Method Not Allowed");
+    return;
   }
 
   try {
     const { amount, userId, toolId } = req.body;
 
     if (!amount || !userId || !toolId) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: "Missing required parameters",
       });
+      return;
     }
 
     const client = getPhonePeClient();
@@ -186,16 +290,18 @@ export const createPhonePeSdkOrder = functions.https.onRequest(async (req, res) 
     
     const response = await client.createSdkOrder(request);
     
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       token: response.token,
       merchantOrderId,
     });
+    return;
   } catch (error) {
     console.error("Error in createPhonePeSdkOrder:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Internal Server Error",
     });
+    return;
   }
 }); 

@@ -856,6 +856,22 @@ app.get('/cors-test', (req: Request, res: Response) => {
   });
 });
 
+// PhonePe payment routes
+app.post('/initializePhonePePayment', (req: Request, res: Response) => {
+  // Forward the request to the standalone function
+  return initializePhonePePayment(req, res);
+});
+
+app.get('/verifyPhonePePayment', (req: Request, res: Response) => {
+  // Forward the request to the standalone function
+  return verifyPhonePePayment(req, res);
+});
+
+app.post('/createPhonePeSdkOrder', (req: Request, res: Response) => {
+  // Forward the request to the standalone function
+  return createPhonePeSdkOrder(req, res);
+});
+
 // Add a catch-all route at the end to handle 404s
 app.all('*', (req, res) => {
   console.log(`Route not found: ${req.method} ${req.path}`);
