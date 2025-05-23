@@ -42,14 +42,14 @@ const Checkout = () => {
       return;
     }
     
-    if (!user?.uid) {
+    if (!user?.id) {
       console.log("❌ Error: Missing user ID", user);
       setErrorMessage('User authentication issue. Please login again.');
       return;
     }
     
     console.log("✅ Proceeding with payment for:", {
-      userId: user.uid,
+      userId: user.id,
       toolId: cartItems[0].id,
       amount: totalAmount
     });
@@ -64,7 +64,7 @@ const Checkout = () => {
       // Initialize PhonePe payment
       const response = await initializePhonePePayment(
         totalAmount,
-        user.uid,
+        user.id,
         primaryToolId
       );
       
