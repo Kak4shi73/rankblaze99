@@ -30,8 +30,14 @@ const Checkout = () => {
     setErrorMessage(null);
     
     try {
+      console.log('=== PAYMENT DEBUG START ===');
+      console.log('Cart items:', cartItems);
+      console.log('User:', user);
+      console.log('Total amount:', totalAmount);
+      
       // Get the first tool ID from cart (we'll associate the payment with this tool)
       const primaryToolId = cartItems[0]?.id;
+      console.log('Primary tool ID:', primaryToolId);
       
       // Validate parameters before sending
       if (!primaryToolId) {
@@ -54,19 +60,23 @@ const Checkout = () => {
       });
 
       // Initialize PhonePe payment
+      console.log('Calling initializePhonePePayment...');
       const response = await initializePhonePePayment(
         totalAmount,
         user.uid,
         primaryToolId
       );
+      console.log('Payment initialization response:', response);
 
       if (response.success && response.payload && response.checksum) {
+        console.log('Payment initialization successful, preparing payment form');
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         sessionStorage.setItem('merchantTransactionId', response.merchantTransactionId);
         
         // Instead of form submission, create a popup window with proper attributes
         const paymentUrl = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        console.log('Payment URL:', paymentUrl);
         
         // Create a form for the popup window
         const formHtml = `
@@ -77,6 +87,7 @@ const Checkout = () => {
             <script>
               window.onload = function() {
                 document.getElementById('paymentForm').submit();
+                console.log('Payment form submitted');
               }
             </script>
           </head>
@@ -95,8 +106,10 @@ const Checkout = () => {
         // Create a blob from the HTML content
         const blob = new Blob([formHtml], { type: 'text/html' });
         const blobUrl = URL.createObjectURL(blob);
+        console.log('Created blob URL for payment form');
         
         // Open the payment in a new window with proper attributes
+        console.log('Opening payment window...');
         const paymentWindow = window.open(
           blobUrl,
           'phonepePayment',
@@ -104,23 +117,30 @@ const Checkout = () => {
         );
         
         if (!paymentWindow) {
+          console.error('Payment popup was blocked');
           throw new Error('Payment popup was blocked. Please allow popups for this website.');
         }
+        console.log('Payment window opened');
         
         // Start monitoring payment status
         if (response.merchantTransactionId) {
+          console.log('Starting payment status monitoring for transaction:', response.merchantTransactionId);
           monitorPaymentStatus(response.merchantTransactionId);
         }
         
         // Clean up the blob URL when done
         setTimeout(() => {
           URL.revokeObjectURL(blobUrl);
+          console.log('Blob URL revoked');
         }, 60000); // Clean up after 1 minute
         
       } else {
+        console.error('Payment initialization failed:', response.error);
         throw new Error(response.error || 'Payment initialization failed');
       }
+      console.log('=== PAYMENT DEBUG END ===');
     } catch (error) {
+      console.error('=== PAYMENT ERROR ===', error);
       setIsProcessing(false);
       setErrorMessage(error instanceof Error ? error.message : 'An error occurred during payment initialization');
       console.error('Payment error:', error);

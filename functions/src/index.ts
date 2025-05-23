@@ -288,18 +288,27 @@ const generateChecksum = (payload: string, saltKey: string): string => {
 
 // Initialize payment with explicit CORS headers
 app.post('/initializePayment', async (req: Request, res: Response) => {
+  console.log('==== PAYMENT INITIALIZATION STARTED ====');
   // Set CORS headers for preflight request
   const allowedOrigins = ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5173'];
   const origin = req.headers.origin;
+  console.log('Request origin:', origin);
+  
   if (origin && allowedOrigins.includes(origin)) {
     res.set("Access-Control-Allow-Origin", origin);
+    console.log('Set CORS origin header to:', origin);
+  } else {
+    console.log('Origin not in allowed list, skipping CORS origin header');
   }
+  
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
   res.set("Access-Control-Allow-Credentials", "true");
+  console.log('Set standard CORS headers');
 
   // Handle preflight OPTIONS request
   if (req.method === "OPTIONS") {
+    console.log('Handling OPTIONS preflight request');
     res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.set("Access-Control-Allow-Headers", "Content-Type");
     res.set("Access-Control-Allow-Credentials", "true");
@@ -307,13 +316,24 @@ app.post('/initializePayment', async (req: Request, res: Response) => {
   }
 
   if (req.method !== "POST") {
+    console.log('Rejecting non-POST method:', req.method);
     return res.status(405).send("Method Not Allowed");
   }
 
   try {
     // Log the request body to debug what's being received
     console.log('Received payment init body:', req.body);
+    console.log('Request headers:', req.headers);
     console.log('Content-Type:', req.headers['content-type']);
+    
+    // Check if body is empty
+    if (!req.body || Object.keys(req.body).length === 0) {
+      console.error('Request body is empty or undefined');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Request body is empty or missing' 
+      });
+    }
     
     const { amount, userId, toolId } = req.body;
 
@@ -335,60 +355,83 @@ app.post('/initializePayment', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Amount must be greater than 0' });
     }
 
+    console.log('All validation passed, proceeding with payment initialization');
+
     // Create a unique merchant transaction ID
     const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    console.log('Generated merchantTransactionId:', merchantTransactionId);
     
-    // Save transaction details in Firebase
-    const db = admin.firestore();
-    await db.collection('transactions').doc(merchantTransactionId).set({
-      userId,
-      toolId,
-      amount,
-      status: 'initiated',
-      merchantTransactionId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    try {
+      // Save transaction details in Firebase
+      console.log('Saving transaction to Firestore...');
+      const db = admin.firestore();
+      await db.collection('transactions').doc(merchantTransactionId).set({
+        userId,
+        toolId,
+        amount,
+        status: 'initiated',
+        merchantTransactionId,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log('Transaction saved to Firestore');
 
-    // Create PhonePe payload
-    const payloadData = {
-      merchantId: PHONEPE_CONFIG.merchantId,
-      merchantTransactionId,
-      merchantUserId: userId,
-      amount: amount * 100, // Convert to paise
-      redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-      redirectMode: 'REDIRECT',
-      callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
-      mobileNumber: '9999999999', // Optional, can be removed or made dynamic
-      paymentInstrument: {
-        type: 'PAY_PAGE'
-      }
-    };
+      // Create PhonePe payload
+      console.log('Creating PhonePe payload...');
+      const payloadData = {
+        merchantId: PHONEPE_CONFIG.merchantId,
+        merchantTransactionId,
+        merchantUserId: userId,
+        amount: amount * 100, // Convert to paise
+        redirectUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+        redirectMode: 'REDIRECT',
+        callbackUrl: `${PHONEPE_CONFIG.callbackUrl}?merchantTransactionId=${merchantTransactionId}`,
+        mobileNumber: '9999999999', // Optional, can be removed or made dynamic
+        paymentInstrument: {
+          type: 'PAY_PAGE'
+        }
+      };
+      console.log('PhonePe payload created:', payloadData);
 
-    const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
-    const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
+      console.log('Converting payload to base64...');
+      const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
+      console.log('Generating checksum...');
+      const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
 
-    // Save data needed for verification in Realtime Database for faster access
-    const rtdb = admin.database();
-    await rtdb.ref(`transactions/${merchantTransactionId}`).set({
-      status: 'initiated',
-      amount,
-      userId,
-      toolId,
-      createdAt: Date.now(),
-      checksum,
-      payload: base64Payload
-    });
+      // Save data needed for verification in Realtime Database for faster access
+      console.log('Saving transaction to Realtime Database...');
+      const rtdb = admin.database();
+      await rtdb.ref(`transactions/${merchantTransactionId}`).set({
+        status: 'initiated',
+        amount,
+        userId,
+        toolId,
+        createdAt: Date.now(),
+        checksum,
+        payload: base64Payload
+      });
+      console.log('Transaction saved to Realtime Database');
 
-    return res.status(200).json({
-      success: true,
-      payload: base64Payload,
-      checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
-      merchantTransactionId
-    });
+      console.log('Sending successful response with payment details');
+      return res.status(200).json({
+        success: true,
+        payload: base64Payload,
+        checksum: `${checksum}###${PHONEPE_CONFIG.saltIndex}`,
+        merchantTransactionId
+      });
+    } catch (dbError) {
+      console.error('Database error during payment initialization:', dbError);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database error during payment initialization' 
+      });
+    }
   } catch (error) {
-    console.error('Error initializing payment:', error);
-    return res.status(500).json({ success: false, error: 'Payment initialization failed' });
+    console.error('Unexpected error initializing payment:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown payment initialization error' 
+    });
   }
 });
 

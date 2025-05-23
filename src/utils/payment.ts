@@ -25,6 +25,7 @@ export const initializePhonePePayment = async (
   toolId: string
 ): Promise<{ success: boolean; payload?: string; checksum?: string; merchantTransactionId?: string; error?: string }> => {
   try {
+    console.log('=== PAYMENT UTILITY DEBUG START ===');
     // Validate input parameters
     if (!amount || amount <= 0) {
       console.error('Invalid amount:', amount);
@@ -43,47 +44,92 @@ export const initializePhonePePayment = async (
 
     // Log the data being sent
     console.log('Sending payment request to backend:', { amount, userId, toolId });
+    console.log('API URL:', `${API_BASE_URL}/initializePayment`);
 
-    // Call the backend API to initialize the payment
-    const response = await fetch(`${API_BASE_URL}/initializePayment`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount,
-        userId,
-        toolId,
-      }),
-      credentials: 'include',
-      mode: 'cors'
-    });
+    try {
+      // Call the backend API to initialize the payment
+      const response = await fetch(`${API_BASE_URL}/initializePayment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          userId,
+          toolId,
+        }),
+        credentials: 'include',
+        mode: 'cors'
+      });
+      
 
-    // Handle non-200 responses
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Payment initialization failed with status:', response.status, errorData);
+      console.log('Got response with status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
+
+      // Handle non-200 responses
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('Raw error response:', responseText);
+        
+        let errorData: { error?: string } = {};
+        try {
+          errorData = JSON.parse(responseText);
+          console.error('Parsed error response:', errorData);
+        } catch (e) {
+          console.error('Could not parse error response as JSON');
+        }
+        
+        return {
+          success: false,
+          error: errorData.error || `Payment failed with status code ${response.status}: ${responseText}`
+        };
+      }
+
+      const responseText = await response.text();
+      console.log('Raw success response:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+        console.log('Parsed response data:', data);
+      } catch (e) {
+        console.error('Could not parse success response as JSON:', e);
+        return {
+          success: false,
+          error: `Invalid response format: ${responseText}`
+        };
+      }
+
+      if (!data.success) {
+        console.error('Payment initialization failed:', data.error);
+        return {
+          success: false,
+          error: data.error || 'Failed to initialize payment'
+        };
+      }
+
+      console.log('Payment initialization successful:', {
+        merchantTransactionId: data.merchantTransactionId,
+        hasPayload: !!data.payload,
+        hasChecksum: !!data.checksum
+      });
+      
+      console.log('=== PAYMENT UTILITY DEBUG END ===');
+      return {
+        success: true,
+        payload: data.payload,
+        checksum: data.checksum,
+        merchantTransactionId: data.merchantTransactionId,
+      };
+    } catch (networkError) {
+      console.error('Network error during API call:', networkError);
       return {
         success: false,
-        error: errorData.error || `Payment failed with status code ${response.status}`
+        error: `Network error: ${networkError instanceof Error ? networkError.message : String(networkError)}`
       };
     }
-
-    const data = await response.json();
-
-    if (!data.success) {
-      console.error('Payment initialization failed:', data.error);
-      throw new Error(data.error || 'Failed to initialize payment');
-    }
-
-    return {
-      success: true,
-      payload: data.payload,
-      checksum: data.checksum,
-      merchantTransactionId: data.merchantTransactionId,
-    };
   } catch (error) {
-    console.error('Error initializing payment:', error);
+    console.error('Error in payment initialization:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
