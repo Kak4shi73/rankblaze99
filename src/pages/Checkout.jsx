@@ -24,6 +24,12 @@ const Checkout = () => {
 
   const handlePlaceOrder = async () => {
     console.log("🟠 Pay button clicked", { totalAmount, userId: user?.uid });
+    
+    if (!user?.uid || !cartItems.length) {
+      setErrorMessage('Please login and add tools to cart.');
+      return;
+    }
+    
     setIsProcessing(true);
     setErrorMessage('');
     
@@ -41,7 +47,7 @@ const Checkout = () => {
       
       console.log("📦 Response from server:", response);
 
-      if (response.success) {
+      if (response.success && response.payload && response.checksum && response.merchantTransactionId) {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         console.log("✅ Creating form for PhonePe submission");
