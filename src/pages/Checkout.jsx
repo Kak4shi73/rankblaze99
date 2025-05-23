@@ -13,6 +13,12 @@ const Checkout = () => {
   const { cartItems, clearCart, getTotalPrice } = useCart();
   const totalAmount = getTotalPrice();
 
+  // Add debug console logs
+  useEffect(() => {
+    console.log("🧾 Cart Items:", cartItems);
+    console.log("👤 User Info:", user);
+  }, [cartItems, user]);
+
   // Redirect if no user or empty cart
   useEffect(() => {
     if (!user) {
@@ -23,10 +29,30 @@ const Checkout = () => {
   }, [user, cartItems, navigate]);
 
   const handlePlaceOrder = async () => {
-    if (!user?.uid || !cartItems.length) {
-      setErrorMessage('Please login and add tools to cart.');
+    // More explicit condition checking for debugging
+    if (!user) {
+      console.log("❌ Error: User is not logged in", user);
+      setErrorMessage('Please login to continue checkout.');
       return;
     }
+    
+    if (!cartItems.length) {
+      console.log("❌ Error: Cart is empty", cartItems);
+      setErrorMessage('Please add tools to your cart.');
+      return;
+    }
+    
+    if (!user?.uid) {
+      console.log("❌ Error: Missing user ID", user);
+      setErrorMessage('User authentication issue. Please login again.');
+      return;
+    }
+    
+    console.log("✅ Proceeding with payment for:", {
+      userId: user.uid,
+      toolId: cartItems[0].id,
+      amount: totalAmount
+    });
     
     setIsProcessing(true);
     setErrorMessage('');
@@ -41,6 +67,8 @@ const Checkout = () => {
         user.uid,
         primaryToolId
       );
+      
+      console.log("📱 PhonePe Response:", response);
 
       if (response.success && response.payload && response.checksum && response.merchantTransactionId) {
         // Store cart items in session storage for reference after payment
