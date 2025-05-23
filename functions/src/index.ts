@@ -271,6 +271,182 @@ const corsHandler = cors({
 app.use(corsHandler);
 app.use(express.json());
 
+// PhonePe SDK endpoints in Express app
+app.post('/initializePhonePePayment', async (req: Request, res: Response) => {
+  // Set CORS headers for preflight request
+  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Credentials", "true");
+
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).send("Method Not Allowed");
+  }
+
+  try {
+    const { amount, userId, toolId } = req.body;
+
+    if (!amount || !userId || !toolId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required parameters",
+      });
+    }
+
+    // PhonePe configuration
+    const clientId = process.env.PHONEPE_CLIENT_ID || functions.config().phonepe?.client_id || "SU2505221605010380976302";
+    const clientSecret = process.env.PHONEPE_CLIENT_SECRET || functions.config().phonepe?.client_secret || "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+    const clientVersion = 1;
+    const env = process.env.NODE_ENV === 'production' ? "PRODUCTION" : "SANDBOX";
+
+    // Initialize PhonePe client
+    const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = require('pg-sdk-node');
+    const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env === "PRODUCTION" ? Env.PRODUCTION : Env.SANDBOX);
+    
+    const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
+    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    
+    const request = StandardCheckoutPayRequest.builder()
+      .merchantOrderId(merchantOrderId)
+      .amount(Number(amount) * 100) // PhonePe expects amount in paise
+      .redirectUrl(redirectUrl)
+      .build();
+    
+    const response = await client.pay(request);
+    
+    return res.status(200).json({
+      success: true,
+      checkoutUrl: response.redirectUrl,
+      merchantTransactionId: merchantOrderId,
+    });
+  } catch (error) {
+    console.error("Error in initializePhonePePayment:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+});
+
+app.get('/verifyPhonePePayment', async (req: Request, res: Response) => {
+  // Set CORS headers for preflight request
+  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Credentials", "true");
+
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
+  if (req.method !== "GET") {
+    return res.status(405).send("Method Not Allowed");
+  }
+
+  try {
+    const { merchantOrderId } = req.query;
+
+    if (!merchantOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing merchantOrderId",
+      });
+    }
+
+    // PhonePe configuration
+    const clientId = process.env.PHONEPE_CLIENT_ID || functions.config().phonepe?.client_id || "SU2505221605010380976302";
+    const clientSecret = process.env.PHONEPE_CLIENT_SECRET || functions.config().phonepe?.client_secret || "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+    const clientVersion = 1;
+    const env = process.env.NODE_ENV === 'production' ? "PRODUCTION" : "SANDBOX";
+
+    // Initialize PhonePe client
+    const { StandardCheckoutClient, Env } = require('pg-sdk-node');
+    const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env === "PRODUCTION" ? Env.PRODUCTION : Env.SANDBOX);
+    
+    const response = await client.getOrderStatus(merchantOrderId as string);
+    
+    return res.status(200).json({
+      success: true,
+      state: response.state,
+      code: response.code,
+      message: response.message,
+    });
+  } catch (error) {
+    console.error("Error in verifyPhonePePayment:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+});
+
+app.post('/createPhonePeSdkOrder', async (req: Request, res: Response) => {
+  // Set CORS headers for preflight request
+  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.set("Access-Control-Allow-Credentials", "true");
+
+  // Handle preflight OPTIONS request
+  if (req.method === "OPTIONS") {
+    return res.status(204).send("");
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).send("Method Not Allowed");
+  }
+
+  try {
+    const { amount, userId, toolId } = req.body;
+
+    if (!amount || !userId || !toolId) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required parameters",
+      });
+    }
+
+    // PhonePe configuration
+    const clientId = process.env.PHONEPE_CLIENT_ID || functions.config().phonepe?.client_id || "SU2505221605010380976302";
+    const clientSecret = process.env.PHONEPE_CLIENT_SECRET || functions.config().phonepe?.client_secret || "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+    const clientVersion = 1;
+    const env = process.env.NODE_ENV === 'production' ? "PRODUCTION" : "SANDBOX";
+
+    // Initialize PhonePe client
+    const { StandardCheckoutClient, Env, CreateSdkOrderRequest } = require('pg-sdk-node');
+    const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env === "PRODUCTION" ? Env.PRODUCTION : Env.SANDBOX);
+    
+    const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
+    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    
+    const request = CreateSdkOrderRequest.StandardCheckoutBuilder()
+      .merchantOrderId(merchantOrderId)
+      .amount(Number(amount) * 100) // PhonePe expects amount in paise
+      .redirectUrl(redirectUrl)
+      .build();
+    
+    const response = await client.createSdkOrder(request);
+    
+    return res.status(200).json({
+      success: true,
+      token: response.token,
+      merchantOrderId,
+    });
+  } catch (error) {
+    console.error("Error in createPhonePeSdkOrder:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+});
+
 // PhonePe configuration
 const PHONEPE_CONFIG = {
   merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'M22QF2VXZLOE8',
