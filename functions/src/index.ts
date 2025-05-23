@@ -889,10 +889,4 @@ import {
   createPhonePeSdkOrder 
 } from './phone-pe-payment';
 
-// Export PhonePe payment functions
-export { 
-  initializePhonePePayment, 
-  verifyPhonePePayment, 
-  phonePeCallback,
-  createPhonePeSdkOrder 
-}; 
+// No need to re-export these functions as they're already integrated in the Express app above 

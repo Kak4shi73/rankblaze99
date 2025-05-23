@@ -14,27 +14,114 @@ const app = express();
 
 // Use cors middleware
 app.use(cors);
+app.use(express.json());
+
+// Debug middleware to log all requests
+app.all('*', (req, res, next) => {
+  console.log(`[DEBUG] Request received: ${req.method} ${req.path}`);
+  console.log('[DEBUG] Request headers:', req.headers);
+  console.log('[DEBUG] Request body:', req.body);
+  next();
+});
 
 // PhonePe webhook endpoint
 app.post('/webhook/phonepe', (req, res) => {
-  // Forward the request to the phonePeCallback function
-  return mainFunctions.phonePeCallback(req, res);
+  try {
+    return mainFunctions.phonePeCallback(req, res);
+  } catch (error) {
+    console.error('Error in phonePeCallback:', error);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
 });
 
-// Add PhonePe payment routes
-app.post('/initializePhonePePayment', (req, res) => {
-  // Forward the request to the standalone function
-  return mainFunctions.initializePhonePePayment(req, res);
+// Add PhonePe payment routes with direct implementation
+app.post('/initializePhonePePayment', async (req, res) => {
+  console.log("PhonePe payment route hit with body:", req.body);
+  
+  try {
+    const { amount, userId, toolId } = req.body;
+
+    // Validate required parameters
+    if (!amount || !userId || !toolId) {
+      console.error("Missing required parameters:", { amount, userId, toolId });
+      return res.status(400).json({
+        success: false,
+        error: "Missing required parameters",
+      });
+    }
+
+    // PhonePe configuration - using the credentials directly
+    const clientId = "SU2505221605010380976302"; 
+    const clientSecret = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+    const clientVersion = 1;
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Generate a unique merchant order ID
+    const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
+    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    
+    try {
+      // Load the SDK dynamically to avoid import errors
+      const sdkModule = require('pg-sdk-node');
+      const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = sdkModule;
+      
+      console.log("Creating PhonePe client with credentials:", { 
+        clientId, 
+        clientSecret: clientSecret.substring(0, 4) + '****', 
+        clientVersion, 
+        env: isProduction ? 'PRODUCTION' : 'SANDBOX' 
+      });
+      
+      // Initialize client
+      const client = StandardCheckoutClient.getInstance(
+        clientId, 
+        clientSecret, 
+        clientVersion, 
+        isProduction ? Env.PRODUCTION : Env.SANDBOX
+      );
+      
+      console.log("Building request with:", { merchantOrderId, amount: Number(amount) * 100, redirectUrl });
+      
+      // Create the payment request
+      const request = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantOrderId)
+        .amount(Number(amount) * 100) // Convert to paise
+        .redirectUrl(redirectUrl)
+        .build();
+      
+      console.log("Sending request to PhonePe...");
+      
+      // Make the request to PhonePe
+      const response = await client.pay(request);
+      
+      console.log("Response from PhonePe:", response);
+      
+      // Return the checkout URL to the client
+      return res.status(200).json({
+        success: true,
+        checkoutUrl: response.redirectUrl,
+        merchantTransactionId: merchantOrderId,
+      });
+    } catch (sdkError) {
+      console.error("PhonePe SDK Error:", sdkError);
+      return res.status(500).json({
+        success: false,
+        error: sdkError instanceof Error ? sdkError.message : "PhonePe SDK Error",
+      });
+    }
+  } catch (error) {
+    console.error("General Error in initializePhonePePayment:", error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
 });
 
-app.get('/verifyPhonePePayment', (req, res) => {
-  // Forward the request to the standalone function
-  return mainFunctions.verifyPhonePePayment(req, res);
-});
-
-app.post('/createPhonePeSdkOrder', (req, res) => {
-  // Forward the request to the standalone function
-  return mainFunctions.createPhonePeSdkOrder(req, res);
+// Add a catch-all route at the end to handle 404s
+app.all('*', (req, res) => {
+  console.log(`Route not found: ${req.method} ${req.path}`);
+  res.status(404).send(`Route not found: ${req.method} ${req.path}`);
 });
 
 // API endpoint for all routes

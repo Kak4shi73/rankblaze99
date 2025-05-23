@@ -1,5 +1,5 @@
 "use strict";
-var _a, _b, _c, _d, _e, _f, _g;
+var _a, _b, _c, _d, _e, _f, _g, _h;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.api = exports.getToolSession = exports.sendOTPEmail = void 0;
 const functions = require("firebase-functions");
@@ -208,33 +208,266 @@ const corsHandler = cors({
 });
 // Apply CORS to all routes
 app.use(corsHandler);
-// ‼️ Add this to handle all OPTIONS pre-flight requests
-app.options('*', corsHandler);
 app.use(express.json());
+// Debug route to log all requests
+app.all('*', (req, res, next) => {
+    console.log(`[DEBUG] Request received: ${req.method} ${req.path}`);
+    console.log('[DEBUG] Request body:', req.body);
+    console.log('[DEBUG] Request query:', req.query);
+    next(); // Continue to the next middleware
+});
+// PhonePe SDK route - Direct implementation 
+app.post('/initializePhonePePayment', async (req, res) => {
+    console.log("PhonePe payment route hit with body:", req.body);
+    try {
+        const { amount, userId, toolId } = req.body;
+        // Validate required parameters
+        if (!amount || !userId || !toolId) {
+            console.error("Missing required parameters:", { amount, userId, toolId });
+            return res.status(400).json({
+                success: false,
+                error: "Missing required parameters",
+            });
+        }
+        // PhonePe configuration - using the credentials directly
+        const clientId = "SU2505221605010380976302";
+        const clientSecret = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+        const clientVersion = 1;
+        const isProduction = process.env.NODE_ENV === 'production';
+        // Generate a unique merchant order ID
+        const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
+        const redirectUrl = "https://www.rankblaze.in/payment-callback";
+        try {
+            // Load the SDK dynamically to avoid import errors
+            const sdkModule = require('pg-sdk-node');
+            const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = sdkModule;
+            console.log("Creating PhonePe client with credentials:", {
+                clientId,
+                clientSecret: clientSecret.substring(0, 4) + '****',
+                clientVersion,
+                env: isProduction ? 'PRODUCTION' : 'SANDBOX'
+            });
+            // Initialize client
+            const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, isProduction ? Env.PRODUCTION : Env.SANDBOX);
+            console.log("Building request with:", { merchantOrderId, amount: Number(amount) * 100, redirectUrl });
+            // Create the payment request
+            const request = StandardCheckoutPayRequest.builder()
+                .merchantOrderId(merchantOrderId)
+                .amount(Number(amount) * 100) // Convert to paise
+                .redirectUrl(redirectUrl)
+                .build();
+            console.log("Sending request to PhonePe...");
+            // Make the request to PhonePe
+            const response = await client.pay(request);
+            console.log("Response from PhonePe:", response);
+            // Return the checkout URL to the client
+            return res.status(200).json({
+                success: true,
+                checkoutUrl: response.redirectUrl,
+                merchantTransactionId: merchantOrderId,
+            });
+        }
+        catch (sdkError) {
+            console.error("PhonePe SDK Error:", sdkError);
+            return res.status(500).json({
+                success: false,
+                error: sdkError instanceof Error ? sdkError.message : "PhonePe SDK Error",
+            });
+        }
+    }
+    catch (error) {
+        console.error("General Error in initializePhonePePayment:", error);
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : "Internal Server Error",
+        });
+    }
+});
+// Verify PhonePe payment status
+app.get('/verifyPhonePePayment', async (req, res) => {
+    console.log("Verify PhonePe payment route hit with query:", req.query);
+    try {
+        const { merchantOrderId } = req.query;
+        if (!merchantOrderId) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing merchantOrderId",
+            });
+        }
+        // PhonePe configuration
+        const clientId = "SU2505221605010380976302";
+        const clientSecret = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+        const clientVersion = 1;
+        const isProduction = process.env.NODE_ENV === 'production';
+        try {
+            // Load the SDK dynamically
+            const sdkModule = require('pg-sdk-node');
+            const { StandardCheckoutClient, Env } = sdkModule;
+            // Initialize client
+            const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, isProduction ? Env.PRODUCTION : Env.SANDBOX);
+            // Get payment status
+            const response = await client.getOrderStatus(merchantOrderId);
+            console.log("Status response from PhonePe:", response);
+            return res.status(200).json({
+                success: true,
+                state: response.state,
+                code: response.code,
+                message: response.message,
+            });
+        }
+        catch (sdkError) {
+            console.error("PhonePe SDK Error in status check:", sdkError);
+            return res.status(500).json({
+                success: false,
+                error: sdkError instanceof Error ? sdkError.message : "PhonePe SDK Error",
+            });
+        }
+    }
+    catch (error) {
+        console.error("General Error in verifyPhonePePayment:", error);
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : "Internal Server Error",
+        });
+    }
+});
+// Create PhonePe SDK order for frontend integration
+app.post('/createPhonePeSdkOrder', async (req, res) => {
+    console.log("Create PhonePe SDK order route hit with body:", req.body);
+    try {
+        const { amount, userId, toolId } = req.body;
+        if (!amount || !userId || !toolId) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required parameters",
+            });
+        }
+        // PhonePe configuration
+        const clientId = "SU2505221605010380976302";
+        const clientSecret = "c6c71ce3-b5cb-499e-a8fd-dc55208daa13";
+        const clientVersion = 1;
+        const isProduction = process.env.NODE_ENV === 'production';
+        const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
+        const redirectUrl = "https://www.rankblaze.in/payment-callback";
+        try {
+            // Load the SDK dynamically
+            const sdkModule = require('pg-sdk-node');
+            const { StandardCheckoutClient, Env, CreateSdkOrderRequest } = sdkModule;
+            // Initialize client
+            const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, isProduction ? Env.PRODUCTION : Env.SANDBOX);
+            // Create SDK order
+            const request = CreateSdkOrderRequest.StandardCheckoutBuilder()
+                .merchantOrderId(merchantOrderId)
+                .amount(Number(amount) * 100) // Convert to paise
+                .redirectUrl(redirectUrl)
+                .build();
+            const response = await client.createSdkOrder(request);
+            console.log("SDK order response from PhonePe:", response);
+            return res.status(200).json({
+                success: true,
+                token: response.token,
+                merchantOrderId,
+            });
+        }
+        catch (sdkError) {
+            console.error("PhonePe SDK Error in SDK order creation:", sdkError);
+            return res.status(500).json({
+                success: false,
+                error: sdkError instanceof Error ? sdkError.message : "PhonePe SDK Error",
+            });
+        }
+    }
+    catch (error) {
+        console.error("General Error in createPhonePeSdkOrder:", error);
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : "Internal Server Error",
+        });
+    }
+});
 // PhonePe configuration
 const PHONEPE_CONFIG = {
-    merchantId: ((_c = functions.config().phonepe) === null || _c === void 0 ? void 0 : _c.merchant_id) || process.env.PHONEPE_MERCHANT_ID || 'SU2505221605010380976302',
+    merchantId: ((_c = functions.config().phonepe) === null || _c === void 0 ? void 0 : _c.merchant_id) || process.env.PHONEPE_MERCHANT_ID || 'M22QF2VXZLOE8',
     saltKey: ((_d = functions.config().phonepe) === null || _d === void 0 ? void 0 : _d.salt_key) || process.env.PHONEPE_SALT_KEY || 'c6c71ce3-b5cb-499e-a8fd-dc55208daa13',
     saltIndex: ((_e = functions.config().phonepe) === null || _e === void 0 ? void 0 : _e.salt_index) || process.env.PHONEPE_SALT_INDEX || '1',
     environment: ((_f = functions.config().phonepe) === null || _f === void 0 ? void 0 : _f.env) || process.env.PHONEPE_ENV || 'PROD',
-    callbackUrl: ((_g = functions.config().phonepe) === null || _g === void 0 ? void 0 : _g.callback_url) || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze.in/payment-status'
+    callbackUrl: ((_g = functions.config().phonepe) === null || _g === void 0 ? void 0 : _g.callback_url) || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze.in/payment-status',
+    apiUrl: ((_h = functions.config().phonepe) === null || _h === void 0 ? void 0 : _h.api_url) || process.env.PHONEPE_API_URL || 'https://api.phonepe.com/apis/hermes/pg/v1/pay'
 };
 // Helper function to generate SHA256 checksum
 const generateChecksum = (payload, saltKey) => {
     const string = payload + '/pg/v1/pay' + saltKey;
     return crypto.SHA256(string).toString(crypto.enc.Base64);
 };
-// Initialize payment - Using the correct CORS implementation
-app.post('/initializePayment', (req, res) => {
-    corsHandler(req, res, async () => {
+// Initialize payment with explicit CORS headers
+app.post('/initializePayment', async (req, res) => {
+    console.log('==== PAYMENT INITIALIZATION STARTED ====');
+    // Set CORS headers for preflight request
+    const allowedOrigins = ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5173'];
+    const origin = req.headers.origin;
+    console.log('Request origin:', origin);
+    if (origin && allowedOrigins.includes(origin)) {
+        res.set("Access-Control-Allow-Origin", origin);
+        console.log('Set CORS origin header to:', origin);
+    }
+    else {
+        console.log('Origin not in allowed list, skipping CORS origin header');
+    }
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    res.set("Access-Control-Allow-Credentials", "true");
+    console.log('Set standard CORS headers');
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+        console.log('Handling OPTIONS preflight request');
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers", "Content-Type");
+        res.set("Access-Control-Allow-Credentials", "true");
+        return res.status(204).send(""); // No content
+    }
+    if (req.method !== "POST") {
+        console.log('Rejecting non-POST method:', req.method);
+        return res.status(405).send("Method Not Allowed");
+    }
+    try {
+        // Log the request body to debug what's being received
+        console.log('Received payment init body:', req.body);
+        console.log('Request headers:', req.headers);
+        console.log('Content-Type:', req.headers['content-type']);
+        // Check if body is empty
+        if (!req.body || Object.keys(req.body).length === 0) {
+            console.error('Request body is empty or undefined');
+            return res.status(400).json({
+                success: false,
+                error: 'Request body is empty or missing'
+            });
+        }
+        const { amount, userId, toolId } = req.body;
+        // Create detailed error message for missing parameters
+        const missingParams = [];
+        if (amount === undefined || amount === null)
+            missingParams.push('amount');
+        if (!userId)
+            missingParams.push('userId');
+        if (!toolId)
+            missingParams.push('toolId');
+        if (missingParams.length > 0) {
+            const errorMessage = `Missing required parameters: ${missingParams.join(', ')}`;
+            console.error(errorMessage, { received: req.body });
+            return res.status(400).json({ success: false, error: errorMessage });
+        }
+        // Check if amount is valid (greater than 0)
+        if (amount <= 0) {
+            console.error('Invalid amount value', { amount });
+            return res.status(400).json({ success: false, error: 'Amount must be greater than 0' });
+        }
+        console.log('All validation passed, proceeding with payment initialization');
+        // Create a unique merchant transaction ID
+        const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        console.log('Generated merchantTransactionId:', merchantTransactionId);
         try {
-            const { amount, userId, toolId } = req.body;
-            if (!amount || !userId || !toolId) {
-                return res.status(400).json({ success: false, error: 'Missing required parameters' });
-            }
-            // Create a unique merchant transaction ID
-            const merchantTransactionId = `RANKBLAZE_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             // Save transaction details in Firebase
+            console.log('Saving transaction to Firestore...');
             const db = admin.firestore();
             await db.collection('transactions').doc(merchantTransactionId).set({
                 userId,
@@ -245,7 +478,9 @@ app.post('/initializePayment', (req, res) => {
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
+            console.log('Transaction saved to Firestore');
             // Create PhonePe payload
+            console.log('Creating PhonePe payload...');
             const payloadData = {
                 merchantId: PHONEPE_CONFIG.merchantId,
                 merchantTransactionId,
@@ -259,9 +494,13 @@ app.post('/initializePayment', (req, res) => {
                     type: 'PAY_PAGE'
                 }
             };
+            console.log('PhonePe payload created:', payloadData);
+            console.log('Converting payload to base64...');
             const base64Payload = Buffer.from(JSON.stringify(payloadData)).toString('base64');
+            console.log('Generating checksum...');
             const checksum = generateChecksum(base64Payload, PHONEPE_CONFIG.saltKey);
             // Save data needed for verification in Realtime Database for faster access
+            console.log('Saving transaction to Realtime Database...');
             const rtdb = admin.database();
             await rtdb.ref(`transactions/${merchantTransactionId}`).set({
                 status: 'initiated',
@@ -272,6 +511,8 @@ app.post('/initializePayment', (req, res) => {
                 checksum,
                 payload: base64Payload
             });
+            console.log('Transaction saved to Realtime Database');
+            console.log('Sending successful response with payment details');
             return res.status(200).json({
                 success: true,
                 payload: base64Payload,
@@ -279,38 +520,58 @@ app.post('/initializePayment', (req, res) => {
                 merchantTransactionId
             });
         }
-        catch (error) {
-            console.error('Error initializing payment:', error);
-            return res.status(500).json({ success: false, error: 'Payment initialization failed' });
-        }
-    });
-});
-// Verify payment status - Using the correct CORS implementation
-app.get('/verifyPayment', (req, res) => {
-    corsHandler(req, res, async () => {
-        try {
-            const { merchantTransactionId } = req.query;
-            if (!merchantTransactionId) {
-                return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
-            }
-            // Fetch transaction from Firestore
-            const db = admin.firestore();
-            const transactionDoc = await db.collection('transactions').doc(merchantTransactionId).get();
-            if (!transactionDoc.exists) {
-                return res.status(404).json({ success: false, error: 'Transaction not found' });
-            }
-            const transactionData = transactionDoc.data();
-            return res.status(200).json({
-                success: true,
-                status: (transactionData === null || transactionData === void 0 ? void 0 : transactionData.status) || 'unknown',
-                transactionId: merchantTransactionId
+        catch (dbError) {
+            console.error('Database error during payment initialization:', dbError);
+            return res.status(500).json({
+                success: false,
+                error: 'Database error during payment initialization'
             });
         }
-        catch (error) {
-            console.error('Error verifying payment:', error);
-            return res.status(500).json({ success: false, error: 'Payment verification failed' });
+    }
+    catch (error) {
+        console.error('Unexpected error initializing payment:', error);
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown payment initialization error'
+        });
+    }
+});
+// Verify payment status with explicit CORS headers
+app.get('/verifyPayment', async (req, res) => {
+    // Set CORS headers for preflight request
+    res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+    res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type");
+    res.set("Access-Control-Allow-Credentials", "true");
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+        return res.status(204).send(""); // No content
+    }
+    if (req.method !== "GET") {
+        return res.status(405).send("Method Not Allowed");
+    }
+    try {
+        const { merchantTransactionId } = req.query;
+        if (!merchantTransactionId) {
+            return res.status(400).json({ success: false, error: 'Missing merchantTransactionId' });
         }
-    });
+        // Fetch transaction from Firestore
+        const db = admin.firestore();
+        const transactionDoc = await db.collection('transactions').doc(merchantTransactionId).get();
+        if (!transactionDoc.exists) {
+            return res.status(404).json({ success: false, error: 'Transaction not found' });
+        }
+        const transactionData = transactionDoc.data();
+        return res.status(200).json({
+            success: true,
+            status: (transactionData === null || transactionData === void 0 ? void 0 : transactionData.status) || 'unknown',
+            transactionId: merchantTransactionId
+        });
+    }
+    catch (error) {
+        console.error('Error verifying payment:', error);
+        return res.status(500).json({ success: false, error: 'Payment verification failed' });
+    }
 });
 // Payment callback handler - Using the correct CORS implementation
 app.post('/paymentCallback', (req, res) => {
@@ -450,6 +711,27 @@ app.get('/cors-test', (req, res) => {
         });
     });
 });
+// PhonePe payment routes
+app.post('/initializePhonePePayment', (req, res) => {
+    // Forward the request to the standalone function
+    return (0, phone_pe_payment_1.initializePhonePePayment)(req, res);
+});
+app.get('/verifyPhonePePayment', (req, res) => {
+    // Forward the request to the standalone function
+    return (0, phone_pe_payment_1.verifyPhonePePayment)(req, res);
+});
+app.post('/createPhonePeSdkOrder', (req, res) => {
+    // Forward the request to the standalone function
+    return (0, phone_pe_payment_1.createPhonePeSdkOrder)(req, res);
+});
+// Add a catch-all route at the end to handle 404s
+app.all('*', (req, res) => {
+    console.log(`Route not found: ${req.method} ${req.path}`);
+    res.status(404).send(`Route not found: ${req.method} ${req.path}`);
+});
 // Export the Express app as a Cloud Function
 exports.api = functions.https.onRequest(app);
+// Import PhonePe payment functions
+const phone_pe_payment_1 = require("./phone-pe-payment");
+// No need to re-export these functions as they're already integrated in the Express app above 
 //# sourceMappingURL=index.js.map
