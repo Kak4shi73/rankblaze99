@@ -24,30 +24,32 @@ export const initializePhonePePayment = async (
   userId: string,
   toolId: string
 ): Promise<{ success: boolean; payload?: string; checksum?: string; merchantTransactionId?: string; error?: string }> => {
+  console.log("🚨 INITIALIZE PHONEPE PAYMENT FUNCTION TRIGGERED 🚨");
   console.log("🟢 Starting PhonePe payment...", { amount, userId, toolId });
   try {
     console.log('=== PAYMENT UTILITY DEBUG START ===');
     // Validate input parameters
     if (!amount || amount <= 0) {
-      console.error('Invalid amount:', amount);
+      console.error('❌ Invalid amount:', amount);
       return { success: false, error: 'Amount must be greater than 0' };
     }
 
     if (!userId) {
-      console.error('Missing userId');
+      console.error('❌ Missing userId');
       return { success: false, error: 'User ID is required' };
     }
 
     if (!toolId) {
-      console.error('Missing toolId');
+      console.error('❌ Missing toolId');
       return { success: false, error: 'Tool ID is required' };
     }
 
     // Log the data being sent
-    console.log('Sending payment request to backend:', { amount, userId, toolId });
-    console.log('API URL:', `${API_BASE_URL}/initializePayment`);
+    console.log('📤 Sending payment request to backend:', { amount, userId, toolId });
+    console.log('🔗 API URL:', `${API_BASE_URL}/initializePayment`);
 
     try {
+      console.log("⏳ About to make fetch request to initializePayment endpoint");
       // Call the backend API to initialize the payment
       const response = await fetch(`${API_BASE_URL}/initializePayment`, {
         method: 'POST',
@@ -63,21 +65,21 @@ export const initializePhonePePayment = async (
         mode: 'cors'
       });
       
-
-      console.log('Got response with status:', response.status);
-      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
+      console.log('✅ Fetch request completed');
+      console.log('📊 Got response with status:', response.status);
+      console.log('🔤 Response headers:', Object.fromEntries([...response.headers.entries()]));
 
       // Handle non-200 responses
       if (!response.ok) {
         const responseText = await response.text();
-        console.error('Raw error response:', responseText);
+        console.error('❌ Raw error response:', responseText);
         
         let errorData: { error?: string } = {};
         try {
           errorData = JSON.parse(responseText);
-          console.error('Parsed error response:', errorData);
+          console.error('❌ Parsed error response:', errorData);
         } catch (e) {
-          console.error('Could not parse error response as JSON');
+          console.error('❌ Could not parse error response as JSON');
         }
         
         return {
@@ -87,14 +89,14 @@ export const initializePhonePePayment = async (
       }
 
       const responseText = await response.text();
-      console.log('Raw success response:', responseText);
+      console.log('📝 Raw success response:', responseText);
       
       let data;
       try {
         data = JSON.parse(responseText);
-        console.log('Parsed response data:', data);
+        console.log('📦 Parsed response data:', data);
       } catch (e) {
-        console.error('Could not parse success response as JSON:', e);
+        console.error('❌ Could not parse success response as JSON:', e);
         return {
           success: false,
           error: `Invalid response format: ${responseText}`
@@ -102,14 +104,14 @@ export const initializePhonePePayment = async (
       }
 
       if (!data.success) {
-        console.error('Payment initialization failed:', data.error);
+        console.error('❌ Payment initialization failed:', data.error);
         return {
           success: false,
           error: data.error || 'Failed to initialize payment'
         };
       }
 
-      console.log('Payment initialization successful:', {
+      console.log('✅ Payment initialization successful:', {
         merchantTransactionId: data.merchantTransactionId,
         hasPayload: !!data.payload,
         hasChecksum: !!data.checksum
@@ -123,14 +125,14 @@ export const initializePhonePePayment = async (
         merchantTransactionId: data.merchantTransactionId,
       };
     } catch (networkError) {
-      console.error('Network error during API call:', networkError);
+      console.error('❌ Network error during API call:', networkError);
       return {
         success: false,
         error: `Network error: ${networkError instanceof Error ? networkError.message : String(networkError)}`
       };
     }
   } catch (error) {
-    console.error('Error in payment initialization:', error);
+    console.error('❌ Error in payment initialization:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
