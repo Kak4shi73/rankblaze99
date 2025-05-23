@@ -25,8 +25,6 @@ export const initializePhonePePayment = async (
   userId: string,
   toolId: string
 ): Promise<PaymentInitResponse> => {
-  console.log("🚨 INITIALIZE PHONEPE PAYMENT FUNCTION TRIGGERED", { amount, userId, toolId });
-  
   try {
     // Call the backend API to initialize the payment
     const response = await fetch(`${API_BASE_URL}/initializePayment`, {
@@ -43,11 +41,9 @@ export const initializePhonePePayment = async (
       mode: 'cors'
     });
     
-    console.log('📊 API Response Status:', response.status);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Error response:', errorText);
+      console.error('Payment API error:', errorText);
       return {
         success: false,
         payload: '',
@@ -58,7 +54,6 @@ export const initializePhonePePayment = async (
     }
     
     const data = await response.json();
-    console.log('✅ Payment initialization response:', data);
     
     if (!data.success) {
       return {
@@ -72,7 +67,7 @@ export const initializePhonePePayment = async (
     
     return data;
   } catch (error) {
-    console.error('❌ Error in payment initialization:', error);
+    console.error('Error in payment initialization:', error);
     return {
       success: false,
       payload: '',
@@ -155,12 +150,4 @@ export const processSuccessfulPayment = async (
     console.error('Error processing successful payment:', error);
     return false;
   }
-};
-
-// Helper function to simulate Firebase's arrayUnion
-const arrayUnion = (...elements: any[]) => {
-  return {
-    __op: 'ArrayUnion',
-    elements,
-  };
 };

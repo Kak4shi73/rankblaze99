@@ -23,8 +23,6 @@ const Checkout = () => {
   }, [user, cartItems, navigate]);
 
   const handlePlaceOrder = async () => {
-    console.log("🟠 Pay button clicked", { totalAmount, userId: user?.uid });
-    
     if (!user?.uid || !cartItems.length) {
       setErrorMessage('Please login and add tools to cart.');
       return;
@@ -36,7 +34,6 @@ const Checkout = () => {
     try {
       // Get the first tool ID from cart (we'll associate the payment with this tool)
       const primaryToolId = cartItems[0].id;
-      console.log("🛠 About to call initializePhonePePayment", { totalAmount, userId: user?.uid, primaryToolId });
 
       // Initialize PhonePe payment
       const response = await initializePhonePePayment(
@@ -44,13 +41,10 @@ const Checkout = () => {
         user.uid,
         primaryToolId
       );
-      
-      console.log("📦 Response from server:", response);
 
       if (response.success && response.payload && response.checksum && response.merchantTransactionId) {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
-        console.log("✅ Creating form for PhonePe submission");
         
         // Create form and submit to PhonePe
         const form = document.createElement('form');
@@ -70,14 +64,12 @@ const Checkout = () => {
         form.appendChild(payloadInput);
         form.appendChild(checksumInput);
         document.body.appendChild(form);
-        console.log("🚀 Submitting form to PhonePe");
         form.submit();
       } else {
-        console.error("❌ Payment initialization failed:", response.error);
         throw new Error(response.error || 'Payment initialization failed');
       }
     } catch (error) {
-      console.error('❌ Checkout error:', error);
+      console.error('Checkout error:', error);
       setIsProcessing(false);
       setErrorMessage('There was an error processing your payment. Please try again.');
     }
@@ -140,57 +132,11 @@ const Checkout = () => {
             </div>
           )}
           
-          {/* Test button to verify API connectivity */}
-          <button 
-            onClick={async () => {
-              console.log("🧪 Testing direct API connection...");
-              try {
-                const response = await fetch('https://us-central1-rankblaze-138f7.cloudfunctions.net/api/initializePayment', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    amount: 149,
-                    userId: 'test_user',
-                    toolId: 'test_tool'
-                  }),
-                  credentials: 'include',
-                  mode: 'cors'
-                });
-                
-                console.log("🔄 API Response Status:", response.status);
-                const data = await response.text();
-                console.log("📄 API Response Body:", data);
-                
-                try {
-                  const jsonData = JSON.parse(data);
-                  console.log("✅ Parsed JSON data:", jsonData);
-                } catch (e) {
-                  console.error("❌ Could not parse as JSON:", e);
-                }
-              } catch (error) {
-                console.error("❌ API Test Error:", error);
-              }
-            }}
-            className="w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center mb-4 bg-orange-600 hover:bg-orange-700 text-white"
-          >
-            Test API Connection
-          </button>
-          
-          {/* Simple test button to verify click handling */}
-          <button 
-            onClick={() => console.log("🧪 TEST BUTTON CLICKED - This should appear in console")}
-            className="w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center mb-4 bg-green-600 hover:bg-green-700 text-white"
-          >
-            Test Click (Check Console)
-          </button>
-          
           <button 
             onClick={handlePlaceOrder}
-            disabled={isProcessing || !cartItems.length}
+            disabled={isProcessing || !cartItems.length || !user}
             className={`w-full py-3 rounded-md font-semibold transition-colors flex items-center justify-center mb-4 ${
-              isProcessing || !cartItems.length
+              isProcessing || !cartItems.length || !user
                 ? 'bg-indigo-800/50 text-indigo-300 cursor-not-allowed'
                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
             }`}
