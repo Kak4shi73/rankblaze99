@@ -208,6 +208,8 @@ const corsHandler = cors({
 });
 // Apply CORS to all routes
 app.use(corsHandler);
+// ‼️ Add this to handle all OPTIONS pre-flight requests
+app.options('*', corsHandler);
 app.use(express.json());
 // PhonePe configuration
 const PHONEPE_CONFIG = {
