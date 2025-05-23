@@ -311,10 +311,28 @@ app.post('/initializePayment', async (req: Request, res: Response) => {
   }
 
   try {
+    // Log the request body to debug what's being received
+    console.log('Received payment init body:', req.body);
+    console.log('Content-Type:', req.headers['content-type']);
+    
     const { amount, userId, toolId } = req.body;
 
-    if (!amount || !userId || !toolId) {
-      return res.status(400).json({ success: false, error: 'Missing required parameters' });
+    // Create detailed error message for missing parameters
+    const missingParams = [];
+    if (amount === undefined || amount === null) missingParams.push('amount');
+    if (!userId) missingParams.push('userId');
+    if (!toolId) missingParams.push('toolId');
+
+    if (missingParams.length > 0) {
+      const errorMessage = `Missing required parameters: ${missingParams.join(', ')}`;
+      console.error(errorMessage, { received: req.body });
+      return res.status(400).json({ success: false, error: errorMessage });
+    }
+
+    // Check if amount is valid (greater than 0)
+    if (amount <= 0) {
+      console.error('Invalid amount value', { amount });
+      return res.status(400).json({ success: false, error: 'Amount must be greater than 0' });
     }
 
     // Create a unique merchant transaction ID

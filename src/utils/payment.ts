@@ -25,6 +25,25 @@ export const initializePhonePePayment = async (
   toolId: string
 ): Promise<{ success: boolean; payload?: string; checksum?: string; merchantTransactionId?: string; error?: string }> => {
   try {
+    // Validate input parameters
+    if (!amount || amount <= 0) {
+      console.error('Invalid amount:', amount);
+      return { success: false, error: 'Amount must be greater than 0' };
+    }
+
+    if (!userId) {
+      console.error('Missing userId');
+      return { success: false, error: 'User ID is required' };
+    }
+
+    if (!toolId) {
+      console.error('Missing toolId');
+      return { success: false, error: 'Tool ID is required' };
+    }
+
+    // Log the data being sent
+    console.log('Sending payment request to backend:', { amount, userId, toolId });
+
     // Call the backend API to initialize the payment
     const response = await fetch(`${API_BASE_URL}/initializePayment`, {
       method: 'POST',
@@ -40,9 +59,20 @@ export const initializePhonePePayment = async (
       mode: 'cors'
     });
 
+    // Handle non-200 responses
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Payment initialization failed with status:', response.status, errorData);
+      return {
+        success: false,
+        error: errorData.error || `Payment failed with status code ${response.status}`
+      };
+    }
+
     const data = await response.json();
 
     if (!data.success) {
+      console.error('Payment initialization failed:', data.error);
       throw new Error(data.error || 'Failed to initialize payment');
     }
 

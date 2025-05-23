@@ -31,12 +31,32 @@ const Checkout = () => {
     
     try {
       // Get the first tool ID from cart (we'll associate the payment with this tool)
-      const primaryToolId = cartItems[0].id;
+      const primaryToolId = cartItems[0]?.id;
+      
+      // Validate parameters before sending
+      if (!primaryToolId) {
+        throw new Error('No item in cart. Please add an item before checkout.');
+      }
+      
+      if (!user?.uid) {
+        throw new Error('User authentication required. Please log in again.');
+      }
+      
+      if (totalAmount <= 0) {
+        throw new Error('Invalid amount. Total amount must be greater than 0.');
+      }
+      
+      // Log what we're about to send
+      console.log('Sending payment request with:', {
+        amount: totalAmount,
+        userId: user.uid,
+        toolId: primaryToolId
+      });
 
       // Initialize PhonePe payment
       const response = await initializePhonePePayment(
         totalAmount,
-        user?.uid || '',
+        user.uid,
         primaryToolId
       );
 
