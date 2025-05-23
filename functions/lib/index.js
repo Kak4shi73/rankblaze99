@@ -201,7 +201,7 @@ exports.getToolSession = functions.https.onCall(async (data, context) => {
 const app = express();
 // Configure CORS with the cors package
 const corsHandler = cors({
-    origin: 'https://www.rankblaze.in',
+    origin: ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5173'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-VERIFY'],
     credentials: true
