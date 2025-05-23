@@ -289,7 +289,11 @@ const generateChecksum = (payload: string, saltKey: string): string => {
 // Initialize payment with explicit CORS headers
 app.post('/initializePayment', async (req: Request, res: Response) => {
   // Set CORS headers for preflight request
-  res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
+  const allowedOrigins = ['https://www.rankblaze.in', 'https://rankblaze.in', 'http://localhost:3000', 'http://localhost:5173'];
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+  }
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
   res.set("Access-Control-Allow-Credentials", "true");
