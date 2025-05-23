@@ -74,64 +74,34 @@ const Checkout = () => {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         
-        // Extract the merchantId and saltIndex from the checksum
-        // The checksum format is: checksum###saltIndex
-        const [checksum, saltIndex] = response.checksum.split('###');
+        // Going back to form submission to avoid CORS issues
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
         
-        // DIRECT API CALL instead of form submission
+        // Base64 encoded request payload
+        const payloadInput = document.createElement('input');
+        payloadInput.type = 'hidden';
+        payloadInput.name = 'request';
+        payloadInput.value = response.payload;
+        
+        form.appendChild(payloadInput);
+        
+        // Log what we're submitting
+        console.log("📤 Submitting form to PhonePe with payload:", response.payload);
+        console.log("📤 Merchant ID should be: M22QF2VXZLOE8");
+        
+        // Decode payload for debugging
         try {
-          console.log("Making direct API call to PhonePe...");
-          
-          // Create request body
-          const requestBody = JSON.stringify({
-            request: response.payload
-          });
-          
-          console.log("Request body:", requestBody);
-          console.log("X-VERIFY header:", response.checksum);
-          
-          // Extract merchant ID from payload (for debugging)
           const decodedPayload = JSON.parse(atob(response.payload));
           console.log("Decoded payload:", decodedPayload);
-          
-          // Fetch API to make the request
-          const phonepeResponse = await fetch('https://api.phonepe.com/apis/hermes/pg/v1/pay', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-VERIFY': response.checksum,
-              'X-MERCHANT-ID': decodedPayload.merchantId
-            },
-            body: requestBody
-          });
-          
-          // Check if response is a redirect
-          if (phonepeResponse.redirected) {
-            console.log("Redirecting to:", phonepeResponse.url);
-            window.location.href = phonepeResponse.url;
-            return;
-          }
-          
-          // If we got a response with a redirect URL in the body
-          const responseData = await phonepeResponse.json();
-          console.log("PhonePe API response:", responseData);
-          
-          if (responseData.redirectUrl || responseData.redirect_url) {
-            window.location.href = responseData.redirectUrl || responseData.redirect_url;
-            return;
-          }
-          
-          if (!phonepeResponse.ok) {
-            throw new Error(`PhonePe API error: ${phonepeResponse.status} ${phonepeResponse.statusText}`);
-          }
-          
-          // If we reach here without redirecting, something unusual happened
-          throw new Error("No redirect URL received from PhonePe");
-        } catch (apiError) {
-          console.error("PhonePe API call failed:", apiError);
-          setErrorMessage(`Payment gateway error: ${apiError.message}`);
-          setIsProcessing(false);
+        } catch (e) {
+          console.error("Could not decode payload:", e);
         }
+        
+        // Append form to body and submit
+        document.body.appendChild(form);
+        form.submit();
       } else {
         throw new Error(response.error || 'Payment initialization failed');
       }

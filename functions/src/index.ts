@@ -273,7 +273,7 @@ app.use(express.json());
 
 // PhonePe configuration
 const PHONEPE_CONFIG = {
-  merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'SU2505221605010380976302',
+  merchantId: functions.config().phonepe?.merchant_id || process.env.PHONEPE_MERCHANT_ID || 'M22QF2VXZLOE8',
   saltKey: functions.config().phonepe?.salt_key || process.env.PHONEPE_SALT_KEY || 'c6c71ce3-b5cb-499e-a8fd-dc55208daa13',
   saltIndex: functions.config().phonepe?.salt_index || process.env.PHONEPE_SALT_INDEX || '1',
   environment: functions.config().phonepe?.env || process.env.PHONEPE_ENV || 'PROD',
