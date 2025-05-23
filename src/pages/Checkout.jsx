@@ -77,7 +77,7 @@ const Checkout = () => {
         // Create form and submit to PhonePe
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+        form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
         
         const payloadInput = document.createElement('input');
         payloadInput.type = 'hidden';

@@ -277,7 +277,8 @@ const PHONEPE_CONFIG = {
   saltKey: functions.config().phonepe?.salt_key || process.env.PHONEPE_SALT_KEY || 'c6c71ce3-b5cb-499e-a8fd-dc55208daa13',
   saltIndex: functions.config().phonepe?.salt_index || process.env.PHONEPE_SALT_INDEX || '1',
   environment: functions.config().phonepe?.env || process.env.PHONEPE_ENV || 'PROD',
-  callbackUrl: functions.config().phonepe?.callback_url || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze.in/payment-status'
+  callbackUrl: functions.config().phonepe?.callback_url || process.env.PHONEPE_CALLBACK_URL || 'https://rankblaze.in/payment-status',
+  apiUrl: functions.config().phonepe?.api_url || process.env.PHONEPE_API_URL || 'https://api.phonepe.com/apis/hermes/pg/v1/pay'
 };
 
 // Helper function to generate SHA256 checksum
