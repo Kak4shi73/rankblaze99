@@ -74,24 +74,31 @@ const Checkout = () => {
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
         
-        // Create form and submit to PhonePe
+        // Create form and submit to PhonePe - Using the correct endpoint and parameter names
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = 'https://api.phonepe.com/apis/hermes/pg/v1/pay';
         
+        // Base64 encoded request payload
         const payloadInput = document.createElement('input');
         payloadInput.type = 'hidden';
         payloadInput.name = 'request';
         payloadInput.value = response.payload;
-
+        
+        // X-VERIFY header value as checksumInput
         const checksumInput = document.createElement('input');
         checksumInput.type = 'hidden';
-        checksumInput.name = 'checksum';
+        checksumInput.name = 'X-VERIFY';
         checksumInput.value = response.checksum;
 
+        // Add hidden fields to form
         form.appendChild(payloadInput);
         form.appendChild(checksumInput);
+        
+        // Append form to document body and submit
         document.body.appendChild(form);
+        console.log("📤 Submitting form to PhonePe with payload:", response.payload);
+        console.log("📤 X-VERIFY value:", response.checksum);
         form.submit();
       } else {
         throw new Error(response.error || 'Payment initialization failed');
