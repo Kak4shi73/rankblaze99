@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "analytics": true,
   "builds": [
     {
       "src": "package.json",
