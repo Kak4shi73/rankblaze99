@@ -300,38 +300,35 @@ const Admin = () => {
         // Create a new payment record
         const paymentId = `payment_${Date.now()}`;
         const paymentRef = ref(db, `payments/${paymentId}`);
-        const paymentData = {
-          userId,
-          amount: 399,
-          status: 'completed',
-          paymentMethod: 'admin_activation',
-          createdAt: now
-        };
-        await set(paymentRef, paymentData);
-
+        
         // If singleToolId is provided, only add that tool
         // Otherwise leave tools as empty array
         let defaultTools: Array<{id: string; status: string}> = [];
+        let paymentAmount = 399; // Default subscription amount
+        
         if (singleToolId) {
           defaultTools = [{
             id: singleToolId,
             status: 'active'
           }];
           
-          // Create individual tool payment record
-          const toolId = `tool_${singleToolId}_${Date.now()}`;
-          const toolPaymentRef = ref(db, `payments/${toolId}`);
+          // Get the tool price from available tools
           const toolPrice = AVAILABLE_TOOLS.find(t => t.id === singleToolId)?.price || 133;
-          const toolPaymentData = {
-            userId,
-            toolId: singleToolId,
-            amount: toolPrice,
-            status: 'completed',
-            paymentMethod: 'admin_activation',
-            createdAt: now
-          };
-          await set(toolPaymentRef, toolPaymentData);
+          
+          // Use the tool price as the payment amount instead of creating a separate payment
+          paymentAmount = toolPrice;
         }
+        
+        // Create a single payment record that includes the tool
+        const paymentData = {
+          userId,
+          amount: paymentAmount,
+          status: 'completed',
+          paymentMethod: 'admin_activation',
+          createdAt: now,
+          toolId: singleToolId || undefined // Include toolId in the payment if provided
+        };
+        await set(paymentRef, paymentData);
 
         // Create a new subscription with only specified tool (or empty tools array)
         const subId = `sub_${Date.now()}`;
@@ -341,7 +338,7 @@ const Admin = () => {
           status: 'active',
           startDate: now,
           endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-          amount: 399,
+          amount: paymentAmount,
           paymentId: paymentId,
           tools: defaultTools,
           createdAt: now
@@ -444,25 +441,24 @@ const Admin = () => {
         return;
       }
       
-      // Create a payment record for the tool
-      const toolPaymentId = `tool_payment_${Date.now()}`;
-      const paymentRef = ref(db, `payments/${toolPaymentId}`);
-      const paymentData = {
-        userId,
-        toolId: toolName,
-        amount: price,
-        status: 'completed',
-        paymentMethod: 'admin_assignment',
-        createdAt: now
-      };
-      await set(paymentRef, paymentData);
-      
       // Find active subscription to add the tool to
       const userActiveSubscription = subscriptions.find(sub => 
         sub.userId === userId && sub.status === 'active'
       );
       
       if (userActiveSubscription) {
+        // Create a payment record for the tool ONLY IF we're adding a new tool
+        const toolPaymentId = `tool_payment_${Date.now()}`;
+        const paymentRef = ref(db, `payments/${toolPaymentId}`);
+        const paymentData = {
+          userId,
+          toolId: toolName,
+          amount: price,
+          status: 'completed',
+          paymentMethod: 'admin_assignment',
+          createdAt: now
+        };
+
         // Update the subscription with the new tool
         const subRef = ref(db, `subscriptions/${userActiveSubscription.id}`);
         
@@ -473,6 +469,9 @@ const Admin = () => {
         );
         
         if (!toolExists) {
+          // Create payment record only when actually adding a new tool
+          await set(paymentRef, paymentData);
+          
           // Convert all tools to objects if they aren't already
           const updatedTools = currentTools.map(t => 
             typeof t === 'object' ? t : { id: t, status: 'active' }
