@@ -34,6 +34,7 @@ import SessionManager from './components/SessionManager';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
+import AnalyticsComponent from './config/analytics';
 
 // Helper component to handle redirects from query params
 const RedirectHandler = () => {
@@ -77,6 +78,7 @@ const App = () => {
               <div className="min-h-screen max-w-screen w-full bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900 text-gray-100 flex flex-col overflow-x-hidden">
                 <Navbar />
                 <main className="flex-grow w-full pt-20 sm:pt-24">
+                  <AnalyticsComponent />
                   <Routes>
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Login />} />
@@ -141,9 +143,9 @@ const App = () => {
               </div>
             </MainLayout>
           </CartProvider>
-        </AuthProvider>
-      </Router>
-    </ToastProvider>
+                  </AuthProvider>
+        </Router>
+      </ToastProvider>
   );
 };
 
