@@ -1254,7 +1254,7 @@ const Admin = () => {
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">New Password</label>
-                <input
+                <input 
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
