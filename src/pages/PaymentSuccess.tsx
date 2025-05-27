@@ -30,6 +30,9 @@ const PaymentSuccess = () => {
     setStatus('loading');
     const queryParams = new URLSearchParams(location.search);
     
+    // Log all query parameters for debugging
+    console.log('Payment success page received params:', Object.fromEntries(queryParams.entries()));
+    
     // Check for multiple possible parameter names that PhonePe might use
     const merchantTransactionId = 
       queryParams.get('merchantTransactionId') || 
@@ -37,148 +40,212 @@ const PaymentSuccess = () => {
       queryParams.get('merchantOrderId') ||
       queryParams.get('txnId');
     
-    // If no transaction ID is found, show an error
+    console.log('Extracted transaction ID:', merchantTransactionId);
+    
+    // If no transaction ID is found, try to retrieve from sessionStorage
     if (!merchantTransactionId) {
+      const storedTransactionId = sessionStorage.getItem('lastTransactionId');
+      console.log('Checking sessionStorage for transaction ID:', storedTransactionId);
+      
+      if (storedTransactionId) {
+        console.log('Using transaction ID from sessionStorage:', storedTransactionId);
+        setOrderId(storedTransactionId);
+        
+        // Continue with payment validation using the stored transaction ID
+        try {
+          await processPaymentWithTransactionId(storedTransactionId);
+          return;
+        } catch (error) {
+          console.error('Failed to process with stored transaction ID:', error);
+        }
+      }
+      
       setStatus('failed');
       setErrorMessage('No transaction ID was provided');
       return;
     }
 
     setOrderId(merchantTransactionId);
-
+    
+    // Store transaction ID in sessionStorage for backup retrieval if needed
+    sessionStorage.setItem('lastTransactionId', merchantTransactionId);
+    
     try {
-      // Try the enhanced auto verification first
-      console.log('Using enhanced auto verification for transaction:', merchantTransactionId);
-      const result = await autoVerifyAndProcessPayment(
-        merchantTransactionId, 
-        user?.uid // Pass user ID if available
-      );
-      
-      if (result.success) {
-        // Auto verification worked - fetch updated tools
-        const toolsQuery = new URLSearchParams(location.search).get('tools');
-        
-        if (toolsQuery) {
-          try {
-            const tools = JSON.parse(decodeURIComponent(toolsQuery)) as ToolItem[];
-            setPurchasedTools(tools);
-          } catch (e) {
-            console.error('Error parsing tools from URL:', e);
-          }
-        }
-        
-        setStatus('success');
-        return;
-      } else {
-        // If auto verification failed, fall back to manual process
-        console.log('Auto verification failed, falling back to manual process...');
-        // Continue with existing logic...
-      
-        // Step 1: Validate the payment with the payment gateway
-        const paymentResult = await verifyPaymentStatus(merchantTransactionId);
-        
-        if (!paymentResult.success) {
-          console.error('Payment verification failed:', paymentResult.error);
-          setStatus('failed');
-          setErrorMessage(paymentResult.error || 'Payment verification failed');
-          return;
-        }
-
-        // If there's no user, we can't proceed with activation
-        if (!user) {
-          console.error('User not authenticated during payment success processing');
-          setStatus('failed');
-          setErrorMessage('User authentication required. Please log in.');
-          return;
-        }
-
-        // Step 2: Retrieve purchased tools from Firestore or Realtime Database
-        // First check Realtime Database
-        console.log(`Checking transaction data for ID: ${merchantTransactionId}`);
-        const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
-        const transactionSnapshot = await get(transactionRef);
-        
-        let tools: ToolItem[] = [];
-
-        if (transactionSnapshot.exists()) {
-          const transaction = transactionSnapshot.val();
-          
-          if (transaction.tools && Array.isArray(transaction.tools)) {
-            tools = transaction.tools;
-          } else if (transaction.toolId) {
-            // Single tool purchase
-            tools = [{ id: transaction.toolId, name: transaction.toolName || 'Tool' }];
-          }
-        } else {
-          // If not found in Realtime DB, check Firestore
-          const userPurchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
-          const userPurchaseSnapshot = await getDoc(userPurchaseRef);
-          
-          if (userPurchaseSnapshot.exists()) {
-            const purchaseData = userPurchaseSnapshot.data();
-            if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
-              tools = purchaseData.tools as ToolItem[];
-            }
-          } else {
-            // Check session storage as a fallback
-            const pendingCartItemsJson = sessionStorage.getItem('pendingCartItems');
-            if (pendingCartItemsJson) {
-              try {
-                const pendingCartItems = JSON.parse(pendingCartItemsJson);
-                tools = pendingCartItems.map((item: any) => ({
-                  id: item.id,
-                  name: item.name
-                }));
-              } catch (e) {
-                console.error('Error parsing pendingCartItems:', e);
-              }
-            }
-          }
-        }
-
-        // If we still don't have tools, show an error
-        if (tools.length === 0) {
-          setStatus('failed');
-          setErrorMessage('No tools found for this transaction');
-          return;
-        }
-
-        setPurchasedTools(tools);
-
-        // Step 3: Activate the tools in the user's profile
-        const userRef = doc(firestore, 'users', user.uid);
-        const userSnapshot = await getDoc(userRef);
-        
-        if (userSnapshot.exists()) {
-          // Update the user document to add the purchased tools
-          await updateDoc(userRef, {
-            tools: arrayUnion(...tools.map(tool => tool.id)),
-            updatedAt: serverTimestamp()
-          });
-          
-          // Record the purchase in the user's purchase history
-          const purchaseRecord = {
-            userId: user.uid,
-            orderId: merchantTransactionId,
-            purchasedAt: serverTimestamp(),
-            tools: tools
-          };
-          
-          await updateDoc(doc(firestore, 'user_purchases', merchantTransactionId), purchaseRecord, { merge: true });
-          
-          // Clear any pending items from session storage
-          sessionStorage.removeItem('pendingCartItems');
-          
-          setStatus('success');
-        } else {
-          setStatus('failed');
-          setErrorMessage('User profile not found');
-        }
-      }
+      await processPaymentWithTransactionId(merchantTransactionId);
     } catch (error) {
       console.error('Error during payment validation and tool activation:', error);
       setStatus('failed');
       setErrorMessage('An unexpected error occurred during payment processing');
+    }
+  };
+  
+  // Helper function to process payment with a transaction ID
+  const processPaymentWithTransactionId = async (transactionId: string) => {
+    // Try the enhanced auto verification first
+    console.log('Using enhanced auto verification for transaction:', transactionId);
+    const result = await autoVerifyAndProcessPayment(
+      transactionId, 
+      user?.uid // Pass user ID if available
+    );
+    
+    if (result.success) {
+      // Auto verification worked - fetch updated tools
+      console.log('Auto verification succeeded:', result.message);
+      const toolsQuery = new URLSearchParams(location.search).get('tools');
+      
+      if (toolsQuery) {
+        try {
+          const tools = JSON.parse(decodeURIComponent(toolsQuery)) as ToolItem[];
+          setPurchasedTools(tools);
+        } catch (e) {
+          console.error('Error parsing tools from URL:', e);
+        }
+      } else {
+        // If no tools in query params, try to fetch them from the transaction record
+        try {
+          await fetchToolsFromTransaction(transactionId);
+        } catch (e) {
+          console.error('Error fetching tools from transaction:', e);
+        }
+      }
+      
+      setStatus('success');
+      return;
+    } else {
+      // If auto verification failed, fall back to manual process
+      console.log('Auto verification failed, falling back to manual process...', result.error);
+    
+      // Step 1: Validate the payment with the payment gateway
+      const paymentResult = await verifyPaymentStatus(transactionId);
+      
+      if (!paymentResult.success) {
+        console.error('Payment verification failed:', paymentResult.error);
+        setStatus('failed');
+        setErrorMessage(paymentResult.error || 'Payment verification failed');
+        return;
+      }
+
+      // If there's no user, we can't proceed with activation
+      if (!user) {
+        console.error('User not authenticated during payment success processing');
+        setStatus('failed');
+        setErrorMessage('User authentication required. Please log in.');
+        return;
+      }
+
+      // Step 2: Retrieve purchased tools from Firestore or Realtime Database
+      // First check Realtime Database
+      console.log(`Checking transaction data for ID: ${transactionId}`);
+      const transactionRef = ref(db, `transactions/${transactionId}`);
+      const transactionSnapshot = await get(transactionRef);
+      
+      let tools: ToolItem[] = [];
+
+      if (transactionSnapshot.exists()) {
+        const transaction = transactionSnapshot.val();
+        
+        if (transaction.tools && Array.isArray(transaction.tools)) {
+          tools = transaction.tools;
+        } else if (transaction.toolId) {
+          // Single tool purchase
+          tools = [{ id: transaction.toolId, name: transaction.toolName || 'Tool' }];
+        }
+      } else {
+        // If not found in Realtime DB, check Firestore
+        const userPurchaseRef = doc(firestore, 'user_purchases', transactionId);
+        const userPurchaseSnapshot = await getDoc(userPurchaseRef);
+        
+        if (userPurchaseSnapshot.exists()) {
+          const purchaseData = userPurchaseSnapshot.data();
+          if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
+            tools = purchaseData.tools as ToolItem[];
+          }
+        } else {
+          // Check session storage as a fallback
+          const pendingCartItemsJson = sessionStorage.getItem('pendingCartItems');
+          if (pendingCartItemsJson) {
+            try {
+              const pendingCartItems = JSON.parse(pendingCartItemsJson);
+              tools = pendingCartItems.map((item: any) => ({
+                id: item.id,
+                name: item.name
+              }));
+            } catch (e) {
+              console.error('Error parsing pendingCartItems:', e);
+            }
+          }
+        }
+      }
+
+      // If we still don't have tools, show an error
+      if (tools.length === 0) {
+        setStatus('failed');
+        setErrorMessage('No tools found for this transaction');
+        return;
+      }
+
+      setPurchasedTools(tools);
+
+      // Step 3: Activate the tools in the user's profile
+      const userRef = doc(firestore, 'users', user.uid);
+      const userSnapshot = await getDoc(userRef);
+      
+      if (userSnapshot.exists()) {
+        // Update the user document to add the purchased tools
+        await updateDoc(userRef, {
+          tools: arrayUnion(...tools.map(tool => tool.id)),
+          updatedAt: serverTimestamp()
+        });
+        
+        // Record the purchase in the user's purchase history
+        const purchaseRecord = {
+          userId: user.uid,
+          orderId: transactionId,
+          purchasedAt: serverTimestamp(),
+          tools: tools
+        };
+        
+        await updateDoc(doc(firestore, 'user_purchases', transactionId), purchaseRecord, { merge: true });
+        
+        // Clear any pending items from session storage
+        sessionStorage.removeItem('pendingCartItems');
+        
+        setStatus('success');
+      } else {
+        setStatus('failed');
+        setErrorMessage('User profile not found');
+      }
+    }
+  };
+  
+  // Helper function to fetch tools from transaction data
+  const fetchToolsFromTransaction = async (transactionId: string) => {
+    // Check Realtime Database
+    const transactionRef = ref(db, `transactions/${transactionId}`);
+    const snapshot = await get(transactionRef);
+    
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      if (data.tools && Array.isArray(data.tools)) {
+        setPurchasedTools(data.tools);
+        return;
+      }
+      if (data.toolId) {
+        setPurchasedTools([{ id: data.toolId, name: data.toolName || 'Tool' }]);
+        return;
+      }
+    }
+    
+    // Check Firestore
+    const purchaseRef = doc(firestore, 'user_purchases', transactionId);
+    const purchaseSnapshot = await getDoc(purchaseRef);
+    
+    if (purchaseSnapshot.exists()) {
+      const purchaseData = purchaseSnapshot.data();
+      if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
+        setPurchasedTools(purchaseData.tools as ToolItem[]);
+        return;
+      }
     }
   };
 

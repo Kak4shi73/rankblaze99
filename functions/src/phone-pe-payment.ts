@@ -45,7 +45,12 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
 
     const client = getPhonePeClient();
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    
+    // Build the redirect URL to include the transaction ID as a query parameter
+    const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+    
+    console.log(`Initializing payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
+    console.log(`Using redirectUrl: ${redirectUrl}`);
     
     const request = StandardCheckoutPayRequest.builder()
       .merchantOrderId(merchantOrderId)
@@ -54,6 +59,7 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
       .build();
     
     const response = await client.pay(request);
+    console.log(`PhonePe payment initialized with response:`, JSON.stringify(response, null, 2));
     
     res.status(200).json({
       success: true,
@@ -280,7 +286,12 @@ export const createPhonePeSdkOrder = functions.https.onRequest(async (req, res) 
 
     const client = getPhonePeClient();
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    
+    // Build the redirect URL to include the transaction ID as a query parameter
+    const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+    
+    console.log(`Initializing SDK payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
+    console.log(`Using redirectUrl: ${redirectUrl}`);
     
     const request = CreateSdkOrderRequest.StandardCheckoutBuilder()
       .merchantOrderId(merchantOrderId)
@@ -289,6 +300,7 @@ export const createPhonePeSdkOrder = functions.https.onRequest(async (req, res) 
       .build();
     
     const response = await client.createSdkOrder(request);
+    console.log(`PhonePe SDK order created with response:`, JSON.stringify(response, null, 2));
     
     res.status(200).json({
       success: true,

@@ -14,16 +14,22 @@ const PaymentCallbackRedirect = () => {
     // Get all query parameters
     const queryParams = new URLSearchParams(location.search);
     
-    // PhonePe might use different parameter names - map them if needed
+    // PhonePe might use different parameter names - check all possible variations
     const merchantTransactionId = queryParams.get('merchantTransactionId') || 
                                  queryParams.get('transactionId') || 
-                                 queryParams.get('merchantOrderId');
+                                 queryParams.get('merchantOrderId') ||
+                                 queryParams.get('txnId');
+    
+    // Log for debugging purposes
+    console.log('Payment callback received with params:', Object.fromEntries(queryParams.entries()));
+    console.log('Extracted transaction ID:', merchantTransactionId);
     
     if (merchantTransactionId) {
-      // If we have a transaction ID, redirect with it
+      // If we have a transaction ID, redirect with it explicitly set as merchantTransactionId
       navigate(`/payment-success?merchantTransactionId=${merchantTransactionId}`, { replace: true });
     } else {
-      // If no transaction ID, pass all original query params
+      // If no transaction ID found in any expected parameter, pass all original query params
+      console.warn('No transaction ID found in callback parameters');
       navigate(`/payment-success${location.search}`, { replace: true });
     }
   }, [navigate, location]);
