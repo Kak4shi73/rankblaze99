@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import PaymentStatus from './pages/PaymentStatus';
+import PaymentSuccess from './pages/PaymentSuccess';
 import Tools from './pages/Tools';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
@@ -88,6 +89,7 @@ const App = () => {
                     <Route path="/about" element={<About />} />
                     <Route path="/thankyou" element={<ThankYou />} />
                     <Route path="/payment-status" element={<PaymentStatus />} />
+                    <Route path="/payment-success" element={<PaymentSuccess />} />
                     <Route 
                       path="/dashboard" 
                       element={
@@ -143,9 +145,9 @@ const App = () => {
               </div>
             </MainLayout>
           </CartProvider>
-                  </AuthProvider>
-        </Router>
-      </ToastProvider>
+        </AuthProvider>
+      </Router>
+    </ToastProvider>
   );
 };
 

@@ -1,7 +1,23 @@
-import { Link } from 'react-router-dom';
+import * as React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Home, MessageSquare, Check, ShoppingBag } from 'lucide-react';
 
 const ThankYou = () => {
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    // Check if this is coming from a successful payment
+    const merchantTransactionId = sessionStorage.getItem('merchantTransactionId');
+    
+    if (merchantTransactionId) {
+      // Clear the transaction ID from session storage
+      sessionStorage.removeItem('merchantTransactionId');
+      
+      // Redirect to the payment success page
+      navigate(`/payment-success?merchantTransactionId=${merchantTransactionId}`);
+    }
+  }, [navigate]);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="max-w-xl w-full bg-navy-800/90 backdrop-blur-xl rounded-2xl border border-royal-500/20 p-8 shadow-lg">

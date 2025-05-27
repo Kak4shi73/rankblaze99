@@ -221,12 +221,33 @@ export const processSuccessfulPayment = async (
     // Update the user's profile with the purchased tools
     const userRef = doc(firestore, 'users', userId);
     
-    // Add each tool to the user's tools array
+    // Get the user document to check if it exists
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      console.error('User document not found when processing payment');
+      return false;
+    }
+    
+    // Add each tool to the user's tools array and set access status as "active"
+    await updateDoc(userRef, {
+      tools: firestoreArrayUnion(...toolIds),
+      updatedAt: serverTimestamp(),
+    });
+    
+    // Create or update tool access records for each tool
     for (const toolId of toolIds) {
-      await updateDoc(userRef, {
-        tools: firestoreArrayUnion(toolId),
-        updatedAt: serverTimestamp(),
-      });
+      // Create a unique access record ID
+      const accessId = `${userId}_${toolId}`;
+      
+      const toolAccessRef = doc(firestore, 'tool_access', accessId);
+      await setDoc(toolAccessRef, {
+        userId,
+        toolId,
+        status: 'active',
+        activatedAt: serverTimestamp(),
+        paymentId: merchantTransactionId
+      }, { merge: true });
     }
     
     // Create a payment record
@@ -238,6 +259,15 @@ export const processSuccessfulPayment = async (
       status: 'completed',
       createdAt: serverTimestamp(),
     });
+    
+    // Also save a reference in the user_purchases collection
+    const purchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
+    await setDoc(purchaseRef, {
+      userId,
+      orderId: merchantTransactionId,
+      purchasedAt: serverTimestamp(),
+      tools: toolIds.map(id => ({ id }))
+    }, { merge: true });
     
     return true;
   } catch (error) {

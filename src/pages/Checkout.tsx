@@ -201,12 +201,12 @@ const Checkout = () => {
         attempts++;
         
         const { initializePhonePePayment, verifyPaymentStatus } = await import('../utils/payment');
-        const isComplete = await verifyPaymentStatus(merchantTransactionId);
+        const result = await verifyPaymentStatus(merchantTransactionId);
         
-        if (isComplete) {
-          // Payment successful, redirect to thank you page
+        if (result.success) {
+          // Payment successful, redirect to payment success page
           clearCart();
-          navigate('/thank-you');
+          navigate(`/payment-success?merchantTransactionId=${merchantTransactionId}`);
         } else if (attempts < maxAttempts) {
           // Check again after 3 seconds
           setTimeout(checkStatus, 3000);
