@@ -24,6 +24,7 @@ import Reviews from './pages/Reviews';
 import About from './pages/About';
 import PlaceholderTool from './pages/PlaceholderTool';
 import ThankYou from './pages/ThankYou';
+import PaymentCallbackRedirect from './pages/PaymentCallbackRedirect';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -90,6 +91,12 @@ const App = () => {
                     <Route path="/thankyou" element={<ThankYou />} />
                     <Route path="/payment-status" element={<PaymentStatus />} />
                     <Route path="/payment-success" element={<PaymentSuccess />} />
+                    <Route 
+                      path="/payment-callback" 
+                      element={
+                        <PaymentCallbackRedirect />
+                      } 
+                    />
                     <Route 
                       path="/dashboard" 
                       element={

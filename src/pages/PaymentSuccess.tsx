@@ -1,7 +1,9 @@
 import * as React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { verifyPaymentStatus } from '../utils/payment';
-import { Check, X, ArrowRight } from 'lucide-react';
+import { verifyPaymentStatus, autoVerifyAndProcessPayment } from '../utils/payment';
+import Check from 'lucide-react/dist/esm/icons/check';
+import X from 'lucide-react/dist/esm/icons/x';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import { firestore, db } from '../config/firebase';
 import { doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { ref, get, set } from 'firebase/database';
@@ -23,25 +25,60 @@ const PaymentSuccess = () => {
   const location = useLocation();
   const { user } = useAuth();
 
-  React.useEffect(() => {
-    const validatePaymentAndActivateTools = async () => {
-      const queryParams = new URLSearchParams(location.search);
-      const merchantTransactionId = queryParams.get('merchantTransactionId');
+  // Extract the function to validate payment and activate tools
+  const validatePaymentAndActivateTools = async () => {
+    setStatus('loading');
+    const queryParams = new URLSearchParams(location.search);
+    
+    // Check for multiple possible parameter names that PhonePe might use
+    const merchantTransactionId = 
+      queryParams.get('merchantTransactionId') || 
+      queryParams.get('transactionId') || 
+      queryParams.get('merchantOrderId') ||
+      queryParams.get('txnId');
+    
+    // If no transaction ID is found, show an error
+    if (!merchantTransactionId) {
+      setStatus('failed');
+      setErrorMessage('No transaction ID was provided');
+      return;
+    }
+
+    setOrderId(merchantTransactionId);
+
+    try {
+      // Try the enhanced auto verification first
+      console.log('Using enhanced auto verification for transaction:', merchantTransactionId);
+      const result = await autoVerifyAndProcessPayment(
+        merchantTransactionId, 
+        user?.uid // Pass user ID if available
+      );
       
-      // If no transaction ID is found, show an error
-      if (!merchantTransactionId) {
-        setStatus('failed');
-        setErrorMessage('No transaction ID was provided');
+      if (result.success) {
+        // Auto verification worked - fetch updated tools
+        const toolsQuery = new URLSearchParams(location.search).get('tools');
+        
+        if (toolsQuery) {
+          try {
+            const tools = JSON.parse(decodeURIComponent(toolsQuery)) as ToolItem[];
+            setPurchasedTools(tools);
+          } catch (e) {
+            console.error('Error parsing tools from URL:', e);
+          }
+        }
+        
+        setStatus('success');
         return;
-      }
-
-      setOrderId(merchantTransactionId);
-
-      try {
+      } else {
+        // If auto verification failed, fall back to manual process
+        console.log('Auto verification failed, falling back to manual process...');
+        // Continue with existing logic...
+      
         // Step 1: Validate the payment with the payment gateway
         const paymentResult = await verifyPaymentStatus(merchantTransactionId);
         
         if (!paymentResult.success) {
+          console.error('Payment verification failed:', paymentResult.error);
           setStatus('failed');
           setErrorMessage(paymentResult.error || 'Payment verification failed');
           return;
@@ -49,6 +86,7 @@ const PaymentSuccess = () => {
 
         // If there's no user, we can't proceed with activation
         if (!user) {
+          console.error('User not authenticated during payment success processing');
           setStatus('failed');
           setErrorMessage('User authentication required. Please log in.');
           return;
@@ -56,6 +94,7 @@ const PaymentSuccess = () => {
 
         // Step 2: Retrieve purchased tools from Firestore or Realtime Database
         // First check Realtime Database
+        console.log(`Checking transaction data for ID: ${merchantTransactionId}`);
         const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
         const transactionSnapshot = await get(transactionRef);
         
@@ -135,13 +174,15 @@ const PaymentSuccess = () => {
           setStatus('failed');
           setErrorMessage('User profile not found');
         }
-      } catch (error) {
-        console.error('Error during payment validation and tool activation:', error);
-        setStatus('failed');
-        setErrorMessage('An unexpected error occurred during payment processing');
       }
-    };
+    } catch (error) {
+      console.error('Error during payment validation and tool activation:', error);
+      setStatus('failed');
+      setErrorMessage('An unexpected error occurred during payment processing');
+    }
+  };
 
+  React.useEffect(() => {
     validatePaymentAndActivateTools();
   }, [location.search, user]);
 
@@ -202,19 +243,37 @@ const PaymentSuccess = () => {
               <h2 className="text-2xl font-bold text-white mb-2">Activation Failed</h2>
               <p className="text-gray-300 mb-6">{errorMessage || "We couldn't activate your tools. Please contact support."}</p>
               
-              <div className="flex space-x-3">
+              <div className="flex flex-col space-y-4">
                 <button
-                  onClick={() => navigate('/dashboard')}
-                  className="flex-1 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  onClick={() => validatePaymentAndActivateTools()}
+                  className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
-                  Go to Dashboard
+                  Retry Activation
                 </button>
-                <button
-                  onClick={() => navigate('/')}
-                  className="flex-1 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => navigate('/dashboard')}
+                    className="flex-1 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Go to Dashboard
+                  </button>
+                  <button
+                    onClick={() => navigate('/')}
+                    className="flex-1 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Back to Home
+                  </button>
+                </div>
+                
+                <a
+                  href={`https://wa.me/917982604809?text=Hello%2C%20I%20just%20made%20a%20payment%20but%20my%20tools%20were%20not%20activated%20automatically.%20My%20order%20ID%20is%20${orderId || 'unknown'}.`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
                 >
-                  Back to Home
-                </button>
+                  Contact Support via WhatsApp
+                </a>
               </div>
             </>
           )}

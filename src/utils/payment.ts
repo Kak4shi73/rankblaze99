@@ -275,3 +275,136 @@ export const processSuccessfulPayment = async (
     return false;
   }
 };
+
+/**
+ * Automatically verify and process payment using all available methods
+ * This provides a direct way to handle payment success and activation with comprehensive logging
+ * @param merchantTransactionId - The merchant transaction ID
+ * @param userId - The user ID (optional, will try to verify without it if not provided)
+ * @returns Promise with processing result
+ */
+export const autoVerifyAndProcessPayment = async (
+  merchantTransactionId: string,
+  userId?: string
+): Promise<{success: boolean; message?: string; error?: string}> => {
+  try {
+    console.log(`Starting auto verification for transaction: ${merchantTransactionId}`);
+    
+    // Step 1: Verify the payment status
+    const verificationResult = await verifyPaymentStatus(merchantTransactionId);
+    
+    if (!verificationResult.success) {
+      console.error(`Payment verification failed for ${merchantTransactionId}:`, verificationResult.error);
+      return {
+        success: false,
+        error: verificationResult.error || 'Payment verification failed'
+      };
+    }
+    
+    console.log(`Payment verification successful for ${merchantTransactionId}`);
+    
+    // Step 2: If userId is not provided, try to find it from the transaction data
+    let actualUserId = userId;
+    if (!actualUserId) {
+      try {
+        // Try to get userId from Realtime Database
+        const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
+        const transactionSnapshot = await get(transactionRef);
+        
+        if (transactionSnapshot.exists()) {
+          const transaction = transactionSnapshot.val();
+          if (transaction.userId) {
+            actualUserId = transaction.userId;
+            console.log(`Found userId ${actualUserId} in transaction data`);
+          }
+        }
+        
+        // If still not found, check Firestore
+        if (!actualUserId) {
+          const userPurchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
+          const userPurchaseSnapshot = await getDoc(userPurchaseRef);
+          
+          if (userPurchaseSnapshot.exists()) {
+            const purchaseData = userPurchaseSnapshot.data();
+            if (purchaseData.userId) {
+              actualUserId = purchaseData.userId;
+              console.log(`Found userId ${actualUserId} in user_purchases collection`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error finding userId:', error);
+        // Continue execution even if we can't find userId
+      }
+    }
+    
+    if (!actualUserId) {
+      return {
+        success: false,
+        error: 'User ID not found for this transaction'
+      };
+    }
+    
+    // Step 3: Get the tools associated with this transaction
+    let toolIds: string[] = [];
+    
+    // Check Realtime Database first
+    const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
+    const transactionSnapshot = await get(transactionRef);
+    
+    if (transactionSnapshot.exists()) {
+      const transaction = transactionSnapshot.val();
+      
+      if (transaction.tools && Array.isArray(transaction.tools)) {
+        toolIds = transaction.tools.map((tool: any) => tool.id);
+      } else if (transaction.toolId) {
+        toolIds = [transaction.toolId];
+      }
+      
+      console.log(`Found ${toolIds.length} tools in transaction data:`, toolIds);
+    } 
+    
+    // If no tools found in Realtime DB, check Firestore
+    if (toolIds.length === 0) {
+      const userPurchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
+      const userPurchaseSnapshot = await getDoc(userPurchaseRef);
+      
+      if (userPurchaseSnapshot.exists()) {
+        const purchaseData = userPurchaseSnapshot.data();
+        if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
+          toolIds = purchaseData.tools.map((tool: any) => tool.id);
+        }
+        
+        console.log(`Found ${toolIds.length} tools in user_purchases collection:`, toolIds);
+      }
+    }
+    
+    if (toolIds.length === 0) {
+      return {
+        success: false,
+        error: 'No tools found for this transaction'
+      };
+    }
+    
+    // Step 4: Process the successful payment
+    const processingResult = await processSuccessfulPayment(merchantTransactionId, actualUserId, toolIds);
+    
+    if (!processingResult) {
+      return {
+        success: false,
+        error: 'Failed to process the payment and activate tools'
+      };
+    }
+    
+    return {
+      success: true,
+      message: `Successfully activated ${toolIds.length} tools for user ${actualUserId}`
+    };
+  } catch (error) {
+    console.error('Error in auto verification and processing:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+};

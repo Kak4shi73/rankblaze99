@@ -78,4 +78,35 @@ declare module 'lucide-react' {
 
 declare module 'firebase/auth';
 declare module 'firebase/database';
-declare module 'firebase/firestore'; 
+declare module 'firebase/firestore';
+
+// Add declarations for lucide-react icon modules
+declare module 'lucide-react/dist/esm/icons/check' {
+  import { LucideIcon } from 'lucide-react';
+  const Check: LucideIcon;
+  export default Check;
+}
+
+declare module 'lucide-react/dist/esm/icons/x' {
+  import { LucideIcon } from 'lucide-react';
+  const X: LucideIcon;
+  export default X;
+}
+
+declare module 'lucide-react/dist/esm/icons/arrow-right' {
+  import { LucideIcon } from 'lucide-react';
+  const ArrowRight: LucideIcon;
+  export default ArrowRight;
+}
+
+declare module 'lucide-react/dist/esm/icons/arrow-left' {
+  import { LucideIcon } from 'lucide-react';
+  const ArrowLeft: LucideIcon;
+  export default ArrowLeft;
+}
+
+declare module 'lucide-react/dist/esm/icons/shopping-bag' {
+  import { LucideIcon } from 'lucide-react';
+  const ShoppingBag: LucideIcon;
+  export default ShoppingBag;
+} 
