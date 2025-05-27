@@ -7,7 +7,7 @@ import { createUserWithEmailAndPassword, deleteUser, updatePassword } from 'fire
 import { useToast } from '../context/ToastContext';
 import { clearSessionData } from '../utils/securityUtils';
 import { doc, setDoc } from 'firebase/firestore';
-import AdminHamburgerMenu from '../components/ui/AdminHamburgerMenu';
+import AdminSidebar from '../components/ui/AdminSidebar';
 
 interface User {
   id: string;
@@ -590,9 +590,13 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen pt-20 bg-gradient-to-br from-[#0c0128] via-[#2a0669] to-[#0c0128]">
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* Add the sidebar */}
+      <AdminSidebar />
+
+      {/* Main content area - moved to the right */}
+      <div className="ml-64 px-8 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold text-white">Users Management</h1>
           <div className="flex gap-3 items-center">
             <button
               onClick={() => setShowAddUser(true)}
@@ -601,37 +605,10 @@ const Admin = () => {
               <UserPlus className="h-5 w-5 mr-2" />
               Add User
             </button>
-            <AdminHamburgerMenu adminId="admin" />
-            <button
-              onClick={handleLogout}
-              className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Logout
-            </button>
           </div>
         </div>
 
-        {/* Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h2 className="text-sm text-gray-500">Total Users</h2>
-            <p className="text-2xl font-bold text-blue-500">{users.length}</p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h2 className="text-sm text-gray-500">Total Payments</h2>
-            <p className="text-2xl font-bold text-blue-500">
-              {payments.length}
-            </p>
-          </div>
-          <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h2 className="text-sm text-gray-500">Active Subscriptions</h2>
-            <p className="text-2xl font-bold text-yellow-500">
-              {subscriptions.filter(sub => sub.status === 'active').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Additional Stats */}
+        {/* Stats Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-[#131731] rounded-xl p-6 flex items-center">
             <div className="bg-blue-900/30 p-3 rounded-full mr-4">

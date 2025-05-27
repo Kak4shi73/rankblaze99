@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Search, Check, Copy, Plus, Trash } from 'lucide-react';
+import { Save, Search, Check, Copy, Plus, Trash2 } from 'lucide-react';
 import { ref, onValue, update, get, set } from 'firebase/database';
 import { db } from '../config/firebase';
 import { useToast } from '../context/ToastContext';
 import { toolsData } from '../data/tools';
+import AdminSidebar from '../components/ui/AdminSidebar';
 
 interface ToolCredentials {
   id?: string;
@@ -430,18 +431,12 @@ const UpdateTokens = () => {
   }
 
   return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="container mx-auto px-6 py-8">
+    <div className="min-h-screen pt-20 bg-gradient-to-br from-[#0c0128] via-[#2a0669] to-[#0c0128]">
+      <AdminSidebar />
+
+      <div className="ml-64 px-8 py-8">
         <div className="flex justify-between items-center mb-8">
-          <div className="flex items-center">
-            <button
-              onClick={() => navigate('/admin')}
-              className="mr-4 text-indigo-300 hover:text-indigo-200 transition-colors"
-            >
-              <ArrowLeft className="h-6 w-6" />
-            </button>
-            <h1 className="text-3xl font-bold text-white">Update Tool Tokens</h1>
-          </div>
+          <h1 className="text-3xl font-bold text-white">Update Tool Tokens</h1>
           <button
             onClick={updateAllTokens}
             className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
@@ -568,7 +563,7 @@ const UpdateTokens = () => {
                                     title="Remove token"
                                     disabled={(tokens[toolId] as string[]).length <= 1}
                                   >
-                                    <Trash className="h-4 w-4 text-gray-300" />
+                                    <Trash2 className="h-4 w-4 text-gray-300" />
                                   </button>
                                 </div>
                               </div>

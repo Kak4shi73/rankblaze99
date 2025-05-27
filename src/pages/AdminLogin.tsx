@@ -20,7 +20,7 @@ const AdminLogin = () => {
 
     try {
       // For simplicity, directly check credentials since we know what they should be
-      if (email === 'aryansingh2611@outlook.com' && password === 'Aryan123@') {
+      if (email === 'aryansingh2611@outlook.com' && password === 'Max@8009') {
         // Create admin user in database if it doesn't exist
         const adminRef = ref(db, 'users/admin');
         const snapshot = await get(adminRef);
