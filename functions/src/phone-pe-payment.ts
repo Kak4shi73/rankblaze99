@@ -1,6 +1,12 @@
 import * as functions from 'firebase-functions';
 import { StandardCheckoutClient, Env, StandardCheckoutPayRequest, CreateSdkOrderRequest } from 'pg-sdk-node';
 import { randomUUID } from 'crypto';
+import * as admin from 'firebase-admin';
+
+// Initialize Firebase Admin if not already initialized
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
 
 // PhonePe configuration
 const clientId = process.env.PHONEPE_CLIENT_ID || functions.config().phonepe?.client_id || "";
@@ -77,11 +83,11 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
   }
 });
 
-// API to check payment status
+// API to check payment status (GET method)
 export const verifyPhonePePayment = functions.https.onRequest(async (req, res) => {
   // Set CORS headers
   res.set("Access-Control-Allow-Origin", "https://www.rankblaze.in");
-  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
   res.set("Access-Control-Allow-Credentials", "true");
 
@@ -91,43 +97,160 @@ export const verifyPhonePePayment = functions.https.onRequest(async (req, res) =
     return;
   }
 
-  if (req.method !== "GET") {
-    res.status(405).send("Method Not Allowed");
-    return;
-  }
+  // Process POST request (new verification with Firestore update)
+  if (req.method === "POST") {
+    try {
+      functions.logger.info("POST verifyPhonePePayment called with body:", req.body);
+      
+      const { txnId } = req.body;
+      
+      if (!txnId) {
+        res.status(400).json({
+          success: false, 
+          error: "Missing transaction ID"
+        });
+        return;
+      }
 
-  try {
-    const { merchantOrderId } = req.query;
+      // Get PhonePe client
+      const client = getPhonePeClient();
+      
+      // Call PhonePe API to verify payment status
+      functions.logger.info("Checking payment status with PhonePe for:", txnId);
+      const response = await client.getOrderStatus(txnId);
+      
+      functions.logger.info("PhonePe status response:", response);
 
-    if (!merchantOrderId) {
-      res.status(400).json({
+      // Type assertion for PhonePe response which may have additional properties
+      const phonepeResponse = response as any;
+      const isSuccess = phonepeResponse.code === "PAYMENT_SUCCESS" || response.state === "COMPLETED";
+      
+      if (isSuccess) {
+        functions.logger.info("Payment successful! Updating Firestore");
+        
+        try {
+          // Get the transaction document from Firestore
+          const db = admin.firestore();
+          const txnRef = db.collection("transactions").doc(txnId);
+          const txnSnap = await txnRef.get();
+
+          if (!txnSnap.exists) {
+            functions.logger.error("Transaction not found in Firestore:", txnId);
+            res.status(404).json({ 
+              success: false, 
+              message: "Transaction not found in database" 
+            });
+            return;
+          }
+
+          const txnData = txnSnap.data();
+          if (!txnData) {
+            functions.logger.error("Transaction data is empty");
+            res.status(404).json({ 
+              success: false, 
+              message: "Transaction data not found" 
+            });
+            return;
+          }
+          
+          const { userId, toolId } = txnData;
+
+          functions.logger.info(`Granting tool ${toolId} access to user ${userId}`);
+
+          // 1. Update transaction status to completed
+          await txnRef.update({
+            status: "completed",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          // 2. Add tool to user's tools collection
+          const userToolRef = db.collection("users").doc(userId).collection("tools").doc(toolId);
+          await userToolRef.set({
+            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            toolId,
+            source: "PhonePe"
+          });
+
+          // 3. Also update the user's tools array for backward compatibility
+          await db.collection("users").doc(userId).update({
+            tools: admin.firestore.FieldValue.arrayUnion(toolId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+
+          res.status(200).json({
+            success: true, 
+            message: "Tool access granted", 
+            status: "completed"
+          });
+          return;
+        } catch (dbError) {
+          functions.logger.error("Database error while updating tool access:", dbError);
+          res.status(500).json({
+            success: false, 
+            message: "Database error while granting tool access",
+            error: dbError instanceof Error ? dbError.message : "Unknown database error" 
+          });
+          return;
+        }
+      } else {
+        // Payment verification failed
+        functions.logger.info("Payment verification failed:", phonepeResponse);
+        res.status(400).json({
+          success: false,
+          message: "Payment not successful",
+          state: response.state,
+          code: phonepeResponse.code
+        });
+        return;
+      }
+    } catch (error) {
+      functions.logger.error("Error in POST verifyPhonePePayment:", error);
+      res.status(500).json({
         success: false,
-        error: "Missing merchantOrderId",
+        error: error instanceof Error ? error.message : "Internal Server Error",
       });
       return;
     }
-
-    const client = getPhonePeClient();
-    const response = await client.getOrderStatus(merchantOrderId as string);
-    
-    // Access properties using type assertion
-    const responseAny = response as any;
-    
-    res.status(200).json({
-      success: true,
-      state: response.state,
-      code: responseAny.code || undefined,
-      message: responseAny.message || undefined,
-    });
-    return;
-  } catch (error) {
-    console.error("Error in verifyPhonePePayment:", error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Internal Server Error",
-    });
-    return;
   }
+  
+  // Process GET request (original method)
+  if (req.method === "GET") {
+    try {
+      const { merchantOrderId } = req.query;
+
+      if (!merchantOrderId) {
+        res.status(400).json({
+          success: false,
+          error: "Missing merchantOrderId",
+        });
+        return;
+      }
+
+      const client = getPhonePeClient();
+      const response = await client.getOrderStatus(merchantOrderId as string);
+      
+      // Access properties using type assertion
+      const responseAny = response as any;
+      
+      res.status(200).json({
+        success: true,
+        state: response.state,
+        code: responseAny.code || undefined,
+        message: responseAny.message || undefined,
+      });
+      return;
+    } catch (error) {
+      console.error("Error in verifyPhonePePayment:", error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : "Internal Server Error",
+      });
+      return;
+    }
+  }
+
+  res.status(405).json({ success: false, error: "Method Not Allowed" });
+  return;
 });
 
 // Webhook to handle PhonePe callbacks
@@ -186,12 +309,22 @@ export const phonePeCallback = functions.https.onRequest(async (req, res) => {
           const userId = orderParts[1];
           const toolId = orderParts[2];
           
-          // Import Firebase admin if needed
-          const admin = require('firebase-admin');
-          
           // Update user's profile with purchased tool
           await admin.firestore().collection('users').doc(userId).update({
             tools: admin.firestore.FieldValue.arrayUnion(toolId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          
+          // Add tool to user's tools subcollection (new approach)
+          await admin.firestore().collection('users').doc(userId).collection('tools').doc(toolId).set({
+            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            toolId,
+            source: "PhonePe"
+          });
+          
+          // Update transaction status
+          await admin.firestore().collection('transactions').doc(orderId).update({
+            status: "completed",
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           });
           
@@ -210,7 +343,6 @@ export const phonePeCallback = functions.https.onRequest(async (req, res) => {
       } else if (eventType === 'pg.refund.failed') {
         // Handle refund failure
         // Log and store the event
-        const admin = require('firebase-admin');
         await admin.firestore().collection('payment_events').add({
           type: eventType,
           orderId,
@@ -228,7 +360,6 @@ export const phonePeCallback = functions.https.onRequest(async (req, res) => {
                 eventType === 'paylink.order.completed' ||
                 eventType === 'settlement.attempt.failed') {
         // Handle other events
-        const admin = require('firebase-admin');
         await admin.firestore().collection('payment_events').add({
           type: eventType,
           orderId,

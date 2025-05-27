@@ -206,6 +206,61 @@ export const verifyPaymentStatus = async (merchantTransactionId: string): Promis
 };
 
 /**
+ * Verify the payment and grant tool access using the new POST endpoint
+ * @param txnId - The merchant transaction ID
+ * @returns Promise with payment verification and tool access result
+ */
+export const verifyAndGrantAccess = async (txnId: string): Promise<{success: boolean, message?: string, error?: string}> => {
+  try {
+    console.log(`Verifying and granting access for transaction ${txnId}`);
+    
+    // Call the backend API to verify the payment and grant tool access
+    const response = await fetch(
+      `${API_BASE_URL}/verifyPhonePePayment`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ txnId }),
+        credentials: 'include',
+        mode: 'cors'
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Verification and access grant failed with status ${response.status}:`, errorText);
+      return {
+        success: false,
+        error: `Failed with status code ${response.status}: ${errorText}`
+      };
+    }
+
+    const data = await response.json();
+    console.log('Verification response:', data);
+
+    if (!data.success) {
+      return {
+        success: false,
+        error: data.error || data.message || 'Failed to verify payment'
+      };
+    }
+
+    return {
+      success: true,
+      message: data.message || 'Tool access granted successfully'
+    };
+  } catch (error) {
+    console.error('Error in verifyAndGrantAccess:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+};
+
+/**
  * Process a successful payment
  * @param merchantTransactionId - The merchant transaction ID
  * @param userId - The user ID
@@ -290,7 +345,17 @@ export const autoVerifyAndProcessPayment = async (
   try {
     console.log(`Starting auto verification for transaction: ${merchantTransactionId}`);
     
-    // Step 1: Verify the payment status
+    // Step 1: Try the new direct verification and tool access endpoint
+    const directResult = await verifyAndGrantAccess(merchantTransactionId);
+    
+    if (directResult.success) {
+      console.log('Direct verification and access grant succeeded:', directResult.message);
+      return directResult;
+    }
+    
+    console.log('Direct verification failed, falling back to older methods:', directResult.error);
+    
+    // Step 2: Verify the payment status using the GET endpoint
     const verificationResult = await verifyPaymentStatus(merchantTransactionId);
     
     if (!verificationResult.success) {
@@ -303,7 +368,7 @@ export const autoVerifyAndProcessPayment = async (
     
     console.log(`Payment verification successful for ${merchantTransactionId}`);
     
-    // Step 2: If userId is not provided, try to find it from the transaction data
+    // Step 3: If userId is not provided, try to find it from the transaction data
     let actualUserId = userId;
     if (!actualUserId) {
       try {
@@ -345,7 +410,7 @@ export const autoVerifyAndProcessPayment = async (
       };
     }
     
-    // Step 3: Get the tools associated with this transaction
+    // Step 4: Get the tools associated with this transaction
     let toolIds: string[] = [];
     
     // Check Realtime Database first
@@ -386,7 +451,7 @@ export const autoVerifyAndProcessPayment = async (
       };
     }
     
-    // Step 4: Process the successful payment
+    // Step 5: Process the successful payment
     const processingResult = await processSuccessfulPayment(merchantTransactionId, actualUserId, toolIds);
     
     if (!processingResult) {
