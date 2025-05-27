@@ -11,6 +11,8 @@ interface PaymentInitResponse {
   merchantTransactionId?: string;
   error?: string;
   token?: string; // For SDK integration
+  payload?: string; // For PhonePe form submission
+  checksum?: string; // For PhonePe form submission
 }
 
 /**
@@ -85,6 +87,8 @@ export const initializePhonePePayment = async (
       success: true,
       checkoutUrl: data.checkoutUrl,
       merchantTransactionId: data.merchantTransactionId,
+      payload: data.payload,
+      checksum: data.checksum
     };
   } catch (error) {
     console.error('Error in payment initialization:', error);

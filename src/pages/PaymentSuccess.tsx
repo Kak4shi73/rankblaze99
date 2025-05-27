@@ -34,62 +34,43 @@ const PaymentSuccess = () => {
     console.log('Payment success page received params:', Object.fromEntries(queryParams.entries()));
     
     // Check for multiple possible parameter names that PhonePe might use
-    const merchantTransactionId = 
+    let merchantTransactionId = 
       queryParams.get('merchantTransactionId') || 
       queryParams.get('transactionId') || 
       queryParams.get('merchantOrderId') ||
       queryParams.get('txnId');
     
-    console.log('Extracted transaction ID:', merchantTransactionId);
+    console.log('Extracted transaction ID from URL:', merchantTransactionId);
+    
+    // If no transaction ID in URL, check sessionStorage
+    if (!merchantTransactionId) {
+      console.log('No transaction ID in URL, checking sessionStorage');
+      merchantTransactionId = sessionStorage.getItem('merchantTransactionId') || 
+                              sessionStorage.getItem('lastTransactionId');
+      
+      console.log('Transaction ID from sessionStorage:', merchantTransactionId);
+    }
     
     // Store any transaction ID from URL in sessionStorage immediately
     if (merchantTransactionId) {
       console.log('Storing transaction ID in sessionStorage:', merchantTransactionId);
       sessionStorage.setItem('merchantTransactionId', merchantTransactionId);
       sessionStorage.setItem('lastTransactionId', merchantTransactionId);
-    }
-    
-    // If no transaction ID is found, try to retrieve from sessionStorage
-    if (!merchantTransactionId) {
-      const storedTransactionId = sessionStorage.getItem('lastTransactionId') || 
-                                  sessionStorage.getItem('merchantTransactionId');
-      console.log('Checking sessionStorage for transaction ID:', storedTransactionId);
       
-      if (storedTransactionId) {
-        console.log('Using transaction ID from sessionStorage:', storedTransactionId);
-        setOrderId(storedTransactionId);
-        
-        // Continue with payment validation using the stored transaction ID
-        try {
-          await processPaymentWithTransactionId(storedTransactionId);
-          return;
-        } catch (error) {
-          console.error('Failed to process with stored transaction ID:', error);
-        }
+      setOrderId(merchantTransactionId);
+      
+      try {
+        await processPaymentWithTransactionId(merchantTransactionId);
+        return;
+      } catch (error) {
+        console.error('Failed to process with transaction ID:', error);
+        setStatus('failed');
+        setErrorMessage('Error verifying payment. Please contact support with your Order ID for assistance.');
       }
-      
+    } else {
+      console.error('No transaction ID found in URL or sessionStorage');
       setStatus('failed');
       setErrorMessage('No transaction ID was provided. Please contact support if you completed payment.');
-      return;
-    }
-
-    setOrderId(merchantTransactionId);
-    
-    // Store transaction ID in sessionStorage for backup retrieval if needed
-    sessionStorage.setItem('lastTransactionId', merchantTransactionId);
-    
-    try {
-      await processPaymentWithTransactionId(merchantTransactionId);
-    } catch (error) {
-      console.error('Error during payment validation and tool activation:', error);
-      setStatus('failed');
-      setErrorMessage('An unexpected error occurred during payment processing');
-      
-      // Start retry mechanism if automatic processing fails
-      if (user?.uid) {
-        console.log('Starting manual verification process for user', user.uid);
-        tryManualVerification(merchantTransactionId, user.uid);
-      }
     }
   };
   

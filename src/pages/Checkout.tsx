@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext';
+import { useCart, CartItem } from '../context/CartContext';
 import { initializePhonePePayment } from '../utils/payment';
 import { CreditCard } from 'lucide-react';
 // Import these specific icons directly to avoid issues
@@ -106,72 +106,106 @@ const Checkout = () => {
       );
       console.log('Payment initialization response:', response);
 
-      if (response.success && response.payload && response.checksum) {
-        console.log('Payment initialization successful, preparing payment form');
+      if (response.success) {
+        console.log('Payment initialization successful');
+        
         // Store cart items in session storage for reference after payment
         sessionStorage.setItem('pendingCartItems', JSON.stringify(cartItems));
-        sessionStorage.setItem('merchantTransactionId', response.merchantTransactionId);
         
-        // Instead of form submission, create a popup window with proper attributes
-        const paymentUrl = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
-        console.log('Payment URL:', paymentUrl);
-        
-        // Create a form for the popup window
-        const formHtml = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Processing Payment...</title>
-            <script>
-              window.onload = function() {
-                document.getElementById('paymentForm').submit();
-                console.log('Payment form submitted');
-              }
-            </script>
-          </head>
-          <body>
-            <form id="paymentForm" method="POST" action="${paymentUrl}">
-              <input type="hidden" name="request" value="${response.payload}">
-              <input type="hidden" name="X-VERIFY" value="${response.checksum}">
-            </form>
-            <div style="text-align:center; margin-top:20px;">
-              <p>Processing your payment...</p>
-            </div>
-          </body>
-          </html>
-        `;
-        
-        // Create a blob from the HTML content
-        const blob = new Blob([formHtml], { type: 'text/html' });
-        const blobUrl = URL.createObjectURL(blob);
-        console.log('Created blob URL for payment form');
-        
-        // Open the payment in a new window with proper attributes
-        console.log('Opening payment window...');
-        const paymentWindow = window.open(
-          blobUrl,
-          'phonepePayment',
-          'width=800,height=600,noopener,noreferrer'
-        );
-        
-        if (!paymentWindow) {
-          console.error('Payment popup was blocked');
-          throw new Error('Payment popup was blocked. Please allow popups for this website.');
-        }
-        console.log('Payment window opened');
-        
-        // Start monitoring payment status
+        // Ensure we store merchantTransactionId for later verification
         if (response.merchantTransactionId) {
-          console.log('Starting payment status monitoring for transaction:', response.merchantTransactionId);
-          monitorPaymentStatus(response.merchantTransactionId);
+          console.log('Storing merchant transaction ID:', response.merchantTransactionId);
+          sessionStorage.setItem('merchantTransactionId', response.merchantTransactionId);
+        } else {
+          console.warn('No merchantTransactionId received from backend');
         }
         
-        // Clean up the blob URL when done
-        setTimeout(() => {
-          URL.revokeObjectURL(blobUrl);
-          console.log('Blob URL revoked');
-        }, 60000); // Clean up after 1 minute
-        
+        // Check if we have a direct checkout URL
+        if (response.checkoutUrl) {
+          console.log('Using direct checkout URL:', response.checkoutUrl);
+          // Open the checkout URL in a new window
+          const paymentWindow = window.open(
+            response.checkoutUrl,
+            'phonepePayment',
+            'width=800,height=600,noopener,noreferrer'
+          );
+          
+          if (!paymentWindow) {
+            console.error('Payment popup was blocked');
+            throw new Error('Payment popup was blocked. Please allow popups for this website.');
+          }
+          
+          // Start monitoring payment status if we have a transaction ID
+          if (response.merchantTransactionId) {
+            console.log('Starting payment status monitoring for transaction:', response.merchantTransactionId);
+            monitorPaymentStatus(response.merchantTransactionId);
+          }
+          
+        } else if (response.payload && response.checksum) {
+          // If we have payload and checksum, create the form submission
+          console.log('Creating form submission with payload and checksum');
+          
+          const paymentUrl = 'https://pay-api.phonepe.com/apis/hermes/pg/v1/pay';
+          console.log('Payment URL:', paymentUrl);
+          
+          // Create a form for the popup window
+          const formHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Processing Payment...</title>
+              <script>
+                window.onload = function() {
+                  document.getElementById('paymentForm').submit();
+                  console.log('Payment form submitted');
+                }
+              </script>
+            </head>
+            <body>
+              <form id="paymentForm" method="POST" action="${paymentUrl}">
+                <input type="hidden" name="request" value="${response.payload}">
+                <input type="hidden" name="X-VERIFY" value="${response.checksum}">
+              </form>
+              <div style="text-align:center; margin-top:20px;">
+                <p>Processing your payment...</p>
+              </div>
+            </body>
+            </html>
+          `;
+          
+          // Create a blob from the HTML content
+          const blob = new Blob([formHtml], { type: 'text/html' });
+          const blobUrl = URL.createObjectURL(blob);
+          console.log('Created blob URL for payment form');
+          
+          // Open the payment in a new window with proper attributes
+          console.log('Opening payment window...');
+          const paymentWindow = window.open(
+            blobUrl,
+            'phonepePayment',
+            'width=800,height=600,noopener,noreferrer'
+          );
+          
+          if (!paymentWindow) {
+            console.error('Payment popup was blocked');
+            throw new Error('Payment popup was blocked. Please allow popups for this website.');
+          }
+          console.log('Payment window opened');
+          
+          // Start monitoring payment status
+          if (response.merchantTransactionId) {
+            console.log('Starting payment status monitoring for transaction:', response.merchantTransactionId);
+            monitorPaymentStatus(response.merchantTransactionId);
+          }
+          
+          // Clean up the blob URL when done
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            console.log('Blob URL revoked');
+          }, 60000); // Clean up after 1 minute
+        } else {
+          throw new Error('Payment initialization succeeded but required data is missing');
+        }
       } else {
         console.error('Payment initialization failed:', response.error);
         throw new Error(response.error || 'Payment initialization failed');
@@ -252,7 +286,7 @@ const Checkout = () => {
                 </h2>
                 
                 <div className="space-y-4">
-                  {cartItems.map((item) => (
+                  {cartItems.map((item: CartItem) => (
                     <div key={item.id} className="flex justify-between border-b border-gray-600/50 pb-3">
                       <div>
                         <p className="text-white font-medium">{item.name}</p>

@@ -60,6 +60,8 @@ exports.initializePhonePePayment = functions.https.onRequest(async (req, res) =>
             success: true,
             checkoutUrl: response.redirectUrl,
             merchantTransactionId: merchantOrderId,
+            payload: response.payload,
+            checksum: response.checksum
         });
         return;
     }
@@ -90,18 +92,34 @@ exports.verifyPhonePePayment = functions.https.onRequest(async (req, res) => {
             functions.logger.info("POST verifyPhonePePayment called with body:", req.body);
             const { txnId } = req.body;
             if (!txnId) {
+                functions.logger.error("Missing transaction ID in request body");
                 res.status(400).json({
                     success: false,
                     error: "Missing transaction ID"
                 });
                 return;
             }
+
+            functions.logger.info(`Verifying transaction with ID: ${txnId}`);
+
             // Get PhonePe client
             const client = getPhonePeClient();
+            
             // Call PhonePe API to verify payment status
             functions.logger.info("Checking payment status with PhonePe for:", txnId);
-            const response = await client.getOrderStatus(txnId);
-            functions.logger.info("PhonePe status response:", response);
+            let response;
+            try {
+                response = await client.getOrderStatus(txnId);
+                functions.logger.info("PhonePe status response:", response);
+            } catch (phonepeError) {
+                functions.logger.error("Error from PhonePe API:", phonepeError);
+                res.status(500).json({
+                    success: false,
+                    error: "Failed to verify payment with payment gateway",
+                    message: phonepeError instanceof Error ? phonepeError.message : "Unknown PhonePe API error"
+                });
+                return;
+            }
             // Type assertion for PhonePe response which may have additional properties
             const phonepeResponse = response;
             const isSuccess = phonepeResponse.code === "PAYMENT_SUCCESS" || response.state === "COMPLETED";
