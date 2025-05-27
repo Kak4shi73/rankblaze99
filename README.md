@@ -124,3 +124,43 @@ If you encounter issues with the Cashfree integration:
 2. Verify Firebase Functions logs for backend errors
 3. Make sure Cashfree script is loaded
 4. Verify that the correct credentials are set in Firebase config 
+
+## Payment System Integration
+
+The RankBlaze platform integrates with PhonePe for payment processing. Here's how the payment flow works:
+
+1. User selects a tool to purchase and clicks the checkout button
+2. Payment is initiated through PhonePe and user is redirected to PhonePe payment page
+3. After payment, user is redirected back to RankBlaze with transaction details
+4. The system automatically verifies payment status with PhonePe and grants tool access
+
+### Recent Payment System Fixes
+
+The payment verification system has been enhanced to handle various edge cases:
+
+- Transaction ID detection from multiple possible parameters
+- Robust verification with fallback mechanisms
+- Multiple verification attempts for failed transactions
+- Improved error handling and user feedback
+- Manual verification process for exceptional cases
+
+### Payment System Deployment
+
+To deploy the updated payment system:
+
+1. Build and deploy the Firebase functions:
+   ```
+   cd functions
+   npm run build
+   firebase deploy --only functions
+   ```
+
+2. Build and deploy the frontend:
+   ```
+   npm run build
+   firebase deploy --only hosting
+   ```
+
+3. Test the payment flow with a test transaction.
+
+If you encounter any issues with payments, please check the Firebase logs for detailed error messages. 

@@ -42,9 +42,17 @@ const PaymentSuccess = () => {
     
     console.log('Extracted transaction ID:', merchantTransactionId);
     
+    // Store any transaction ID from URL in sessionStorage immediately
+    if (merchantTransactionId) {
+      console.log('Storing transaction ID in sessionStorage:', merchantTransactionId);
+      sessionStorage.setItem('merchantTransactionId', merchantTransactionId);
+      sessionStorage.setItem('lastTransactionId', merchantTransactionId);
+    }
+    
     // If no transaction ID is found, try to retrieve from sessionStorage
     if (!merchantTransactionId) {
-      const storedTransactionId = sessionStorage.getItem('lastTransactionId');
+      const storedTransactionId = sessionStorage.getItem('lastTransactionId') || 
+                                  sessionStorage.getItem('merchantTransactionId');
       console.log('Checking sessionStorage for transaction ID:', storedTransactionId);
       
       if (storedTransactionId) {
@@ -61,7 +69,7 @@ const PaymentSuccess = () => {
       }
       
       setStatus('failed');
-      setErrorMessage('No transaction ID was provided');
+      setErrorMessage('No transaction ID was provided. Please contact support if you completed payment.');
       return;
     }
 
@@ -76,6 +84,12 @@ const PaymentSuccess = () => {
       console.error('Error during payment validation and tool activation:', error);
       setStatus('failed');
       setErrorMessage('An unexpected error occurred during payment processing');
+      
+      // Start retry mechanism if automatic processing fails
+      if (user?.uid) {
+        console.log('Starting manual verification process for user', user.uid);
+        tryManualVerification(merchantTransactionId, user.uid);
+      }
     }
   };
   
@@ -194,6 +208,57 @@ const PaymentSuccess = () => {
           }]);
         }
       }
+    }
+  };
+
+  // Function to handle manual verification when automatic methods fail
+  const tryManualVerification = async (transactionId: string, userId: string) => {
+    try {
+      console.log('Attempting manual verification for transaction', transactionId);
+      
+      // Check if transaction ID follows our format (ord_userId_toolId_timestamp)
+      if (transactionId.startsWith('ord_')) {
+        const parts = transactionId.split('_');
+        if (parts.length >= 3) {
+          const toolId = parts[2];
+          console.log(`Extracted toolId=${toolId} from transaction ID`);
+          
+          // Try to verify if the user already has the tool (might have been granted but UI wasn't updated)
+          const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
+          const userToolDoc = await getDoc(userToolRef);
+          
+          if (userToolDoc.exists()) {
+            console.log('Tool was already granted to user, updating UI');
+            setPurchasedTools([{ id: toolId, name: 'Your Tool' }]);
+            setStatus('success');
+            return;
+          }
+          
+          // Try to manually create the transaction
+          const txnRef = doc(firestore, 'transactions', transactionId);
+          await updateDoc(txnRef, {
+            status: 'manual_verification',
+            updatedAt: serverTimestamp()
+          }).catch(async () => {
+            // If update fails, try to create the document
+            await txnRef.set({
+              userId,
+              toolId,
+              status: 'manual_verification',
+              merchantTransactionId: transactionId,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          });
+          
+          console.log('Created manual verification entry, waiting for admin approval');
+          setStatus('failed');
+          setErrorMessage('Your payment is being verified manually. Please contact support with your Order ID for immediate activation.');
+        }
+      }
+    } catch (error) {
+      console.error('Manual verification failed:', error);
+      // We already set the error state in the main function, so no need to update it here
     }
   };
 

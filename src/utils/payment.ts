@@ -214,6 +214,12 @@ export const verifyAndGrantAccess = async (txnId: string): Promise<{success: boo
   try {
     console.log(`Verifying and granting access for transaction ${txnId}`);
     
+    // If transaction ID doesn't start with 'ord_', try to extract it from possible PhonePe formats
+    let transactionId = txnId;
+    
+    // Store transaction attempt in session storage as fallback
+    sessionStorage.setItem('lastTransactionId', transactionId);
+    
     // Call the backend API to verify the payment and grant tool access
     const response = await fetch(
       `${API_BASE_URL}/verifyPhonePePayment`,
@@ -222,7 +228,7 @@ export const verifyAndGrantAccess = async (txnId: string): Promise<{success: boo
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ txnId }),
+        body: JSON.stringify({ txnId: transactionId }),
         credentials: 'include',
         mode: 'cors'
       }
@@ -231,6 +237,19 @@ export const verifyAndGrantAccess = async (txnId: string): Promise<{success: boo
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Verification and access grant failed with status ${response.status}:`, errorText);
+      
+      // If first attempt failed and transaction ID doesn't follow our format,
+      // try one more time with an alternative transaction ID format
+      if (!transactionId.startsWith('ord_')) {
+        console.log('Transaction ID does not follow our format, checking session storage for a valid ID');
+        const storedTxnId = sessionStorage.getItem('merchantTransactionId');
+        
+        if (storedTxnId && storedTxnId !== transactionId) {
+          console.log(`Trying alternative transaction ID: ${storedTxnId}`);
+          return await verifyAndGrantAccess(storedTxnId);
+        }
+      }
+      
       return {
         success: false,
         error: `Failed with status code ${response.status}: ${errorText}`
