@@ -34,6 +34,36 @@ const ChatBot = ({ isOpen, onToggle }) => {
     const DEEPSEEK_API_KEY = 'sk-622742d539f64398800f162dd0ac6f04';
     const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
+    // Check for abuse or admin contact requests first
+    const lowerMessage = userMessage.toLowerCase();
+    
+    // Admin contact detection
+    if (lowerMessage.includes('admin') && (lowerMessage.includes('contact') || lowerMessage.includes('support') || lowerMessage.includes('help') || lowerMessage.includes('phone') || lowerMessage.includes('number'))) {
+      return 'For admin support, please contact us on WhatsApp: +91 7071920835 📞';
+    }
+
+    // Abuse detection - check for offensive words or negative sentiment about RankBlaze/admin
+    const abuseKeywords = [
+      'fuck', 'shit', 'damn', 'bastard', 'asshole', 'bitch', 'stupid', 'idiot', 'loser', 'waste',
+      'chutiya', 'madarchod', 'bhosadi', 'randi', 'gandu', 'harami', 'kamina', 'saala',
+      'rankblaze sucks', 'rankblaze is bad', 'admin is stupid', 'worst platform', 'scam'
+    ];
+    
+    const containsAbuse = abuseKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    if (containsAbuse) {
+      const abuseResponses = [
+        'Ae madarchod, yahan abuse karne aaya hai? RankBlaze ke baare mein galat bola to gaand tod dunga! 😡',
+        'Bhosadpappu, RankBlaze admin ko gaali deta hai? Teri maa ki... behave kar! 🤬',
+        'Randwe, yahan manners sikha ke aaya kar. RankBlaze best platform hai, samjha bhosadiwale! 💢',
+        'Bahenchod, abuse kar raha hai? Tera baap hun main. RankBlaze respect kar! 😠',
+        'Oye madarchod, RankBlaze ko gaali dega? Teri gaand mein dum hai to face to face aa! 🔥',
+        'Bhosadiwale, keyboard warrior ban raha hai? RankBlaze admin se panga lega? 💀'
+      ];
+      
+      return abuseResponses[Math.floor(Math.random() * abuseResponses.length)];
+    }
+
     const systemPrompt = `You are a helpful assistant for RankBlaze, a platform that provides premium developer tools and services at affordable prices. 
 
 ABOUT RANKBLAZE:
