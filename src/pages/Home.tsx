@@ -4,10 +4,12 @@ import HeroSection from '../components/home/HeroSection';
 import ToolsSlideshow from '../components/home/ToolsSlideshow';
 // import Testimonials from '../components/home/Testimonials';
 import HowItWorks from '../components/home/HowItWorks';
+import ChatBot from '../components/ChatBot.jsx';
 import { useAutoToasts } from '../utils/autoToasts';
 
 const Home = () => {
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   
   // Initialize auto toasts
   useAutoToasts();
@@ -15,6 +17,10 @@ const Home = () => {
   useEffect(() => {
     setIsLoaded(true);
   }, []);
+
+  const toggleChat = () => {
+    setIsChatOpen(!isChatOpen);
+  };
 
   return (
     <div className={`transition-opacity duration-1000 ${isLoaded ? 'opacity-100' : 'opacity-0'} w-full overflow-x-hidden`}>
@@ -40,6 +46,9 @@ const Home = () => {
           </a>
         </div>
       </section>
+
+      {/* ChatBot Component */}
+      <ChatBot isOpen={isChatOpen} onToggle={toggleChat} />
     </div>
   );
 };
