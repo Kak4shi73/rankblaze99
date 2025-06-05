@@ -18,7 +18,7 @@ interface PaymentInitResponse {
 /**
  * Initialize a PhonePe payment
  * @param amount - The payment amount in INR
- * @param userId - The user I
+ * @param userId - The user ID
  * @param toolId - The tool ID
  * @returns Promise with payment initialization response
  */
