@@ -34,7 +34,7 @@ const ChatBot = ({ isOpen, onToggle }) => {
     const DEEPSEEK_API_KEY = 'sk-622742d539f64398800f162dd0ac6f04';
     const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
-    // Check for abuse or admin contact requests first
+    // Check for admin contact requests first
     const lowerMessage = userMessage.toLowerCase();
     
     // Admin contact detection
@@ -44,27 +44,61 @@ const ChatBot = ({ isOpen, onToggle }) => {
 
     // Abuse detection - check for offensive words or negative sentiment about RankBlaze/admin
     const abuseKeywords = [
+      // English abuse words
       'fuck', 'shit', 'damn', 'bastard', 'asshole', 'bitch', 'stupid', 'idiot', 'loser', 'waste',
+      'dickhead', 'motherfucker', 'cunt', 'whore', 'slut', 'prick', 'dumbass', 'retard',
+      'moron', 'imbecile', 'jackass', 'scumbag', 'trash', 'garbage', 'pathetic', 'useless',
+      
+      // Hindi/Hinglish abuse words
       'chutiya', 'madarchod', 'bhosadi', 'randi', 'gandu', 'harami', 'kamina', 'saala',
-      'rankblaze sucks', 'rankblaze is bad', 'admin is stupid', 'worst platform', 'scam'
+      'bhenchod', 'behenchod', 'mc', 'bc', 'chutiye', 'gaandu', 'lavde', 'lund',
+      'bhosdike', 'randwe', 'randwa', 'raand', 'kutte', 'kutta', 'suar', 'janwar',
+      'sala', 'saale', 'kamine', 'harami', 'najayaz', 'badtameez', 'badmaash',
+      'chodu', 'chomu', 'chodu', 'gadhe', 'gadha', 'ullu', 'pagal', 'paagal',
+      'bewakoof', 'buddhu', 'nalayak', 'nikamma', 'faltu', 'bakwaas', 'bekar',
+      
+      // Specific RankBlaze/admin abuse
+      'rankblaze sucks', 'rankblaze is bad', 'rankblaze is shit', 'rankblaze is waste',
+      'admin is stupid', 'admin is idiot', 'worst platform', 'scam', 'fraud',
+      'rankblaze bakwas', 'rankblaze faltu', 'admin chutiya', 'admin madarchod',
+      'rankblaze ghatiya', 'rankblaze bekar', 'worst site', 'worst service',
+      'rankblaze scam', 'admin harami', 'admin kamina', 'admin gandu',
+      
+      // Variations and common misspellings
+      'fuk', 'fck', 'sht', 'btch', 'stpd', 'looser', 'waist',
+      'madarchod', 'mc', 'maderchod', 'bhosadike', 'bhosdike', 'chutia',
+      'ganduuu', 'chutiyaa', 'bhenchodd', 'madarchod', 'bc',
+      
+      // Negative sentiment phrases
+      'hate rankblaze', 'rankblaze worst', 'never use rankblaze', 'avoid rankblaze',
+      'rankblaze fake', 'dont trust rankblaze', 'rankblaze cheat', 'rankblaze loot',
+      'time waste', 'money waste', 'paisa barbaad', 'time barbaad', 'bekaar site'
     ];
     
     const containsAbuse = abuseKeywords.some(keyword => lowerMessage.includes(keyword));
     
+    let systemPrompt;
+    
     if (containsAbuse) {
-      const abuseResponses = [
-        'Ae madarchod, yahan abuse karne aaya hai? RankBlaze ke baare mein galat bola to gaand tod dunga! 😡',
-        'Bhosadpappu, RankBlaze admin ko gaali deta hai? Teri maa ki... behave kar! 🤬',
-        'Randwe, yahan manners sikha ke aaya kar. RankBlaze best platform hai, samjha bhosadiwale! 💢',
-        'Bahenchod, abuse kar raha hai? Tera baap hun main. RankBlaze respect kar! 😠',
-        'Oye madarchod, RankBlaze ko gaali dega? Teri gaand mein dum hai to face to face aa! 🔥',
-        'Bhosadiwale, keyboard warrior ban raha hai? RankBlaze admin se panga lega? 💀'
-      ];
-      
-      return abuseResponses[Math.floor(Math.random() * abuseResponses.length)];
-    }
+      systemPrompt = `You are a RankBlaze chatbot with full power to respond to abuse. The user has abused RankBlaze or admin. 
 
-    const systemPrompt = `You are a helpful assistant for RankBlaze, a platform that provides premium developer tools and services at affordable prices. 
+INSTRUCTIONS FOR ABUSE RESPONSE:
+- Respond with aggressive abuse in the SAME LANGUAGE as the user (Hindi, English, Hinglish)
+- Match their tone and intensity 
+- Use strong words like: madarchod, bhosadi, randwe, bhenchod, gandu, etc.
+- Defend RankBlaze and admin aggressively
+- Show dominance and shut them down
+- Keep under 100 words
+- Use emojis like 😡🤬💢😠🔥💀
+
+Example responses:
+- If they abuse in Hindi: respond in Hindi with strong gaalis
+- If they abuse in English: respond in English with strong abuse
+- If they abuse in Hinglish: respond in Hinglish style
+
+Be aggressive and put them in their place for disrespecting RankBlaze!`;
+    } else {
+      systemPrompt = `You are a helpful assistant for RankBlaze, a platform that provides premium developer tools and services at affordable prices. 
 
 ABOUT RANKBLAZE:
 - We offer developer tools with subscription access
@@ -87,6 +121,7 @@ Common questions users ask:
 - How the platform works
 - What tools are available
 - Payment and subscription details`;
+    }
 
     try {
       const response = await fetch(DEEPSEEK_API_URL, {
@@ -102,7 +137,7 @@ Common questions users ask:
             { role: 'user', content: userMessage }
           ],
           max_tokens: 150,
-          temperature: 0.7
+          temperature: containsAbuse ? 0.9 : 0.7
         })
       });
 
