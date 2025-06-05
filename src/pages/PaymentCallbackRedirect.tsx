@@ -18,19 +18,32 @@ const PaymentCallbackRedirect = () => {
     const merchantTransactionId = queryParams.get('merchantTransactionId') || 
                                  queryParams.get('transactionId') || 
                                  queryParams.get('merchantOrderId') ||
-                                 queryParams.get('txnId');
+                                 queryParams.get('txnId') ||
+                                 queryParams.get('providerReferenceId');
     
     // Log for debugging purposes
     console.log('Payment callback received with params:', Object.fromEntries(queryParams.entries()));
     console.log('Extracted transaction ID:', merchantTransactionId);
     
+    // Store in sessionStorage immediately for backup
     if (merchantTransactionId) {
-      // If we have a transaction ID, redirect with it explicitly set as merchantTransactionId
+      sessionStorage.setItem('merchantTransactionId', merchantTransactionId);
+      sessionStorage.setItem('lastTransactionId', merchantTransactionId);
+      
+      // Redirect with explicit transaction ID parameter
       navigate(`/payment-success?merchantTransactionId=${merchantTransactionId}`, { replace: true });
     } else {
-      // If no transaction ID found in any expected parameter, pass all original query params
-      console.warn('No transaction ID found in callback parameters');
-      navigate(`/payment-success${location.search}`, { replace: true });
+      // If no transaction ID found in any expected parameter, check if we have one in session storage
+      const storedTxnId = sessionStorage.getItem('merchantTransactionId') || sessionStorage.getItem('lastTransactionId');
+      
+      if (storedTxnId) {
+        console.log('Using transaction ID from sessionStorage:', storedTxnId);
+        navigate(`/payment-success?merchantTransactionId=${storedTxnId}`, { replace: true });
+      } else {
+        // If still no transaction ID, pass all original query params
+        console.warn('No transaction ID found in callback parameters or session storage');
+        navigate(`/payment-success${location.search}`, { replace: true });
+      }
     }
   }, [navigate, location]);
   

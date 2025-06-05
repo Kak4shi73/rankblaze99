@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { verifyAndGrantAccess, autoVerifyAndProcessPayment } from '../utils/payment';
 import Check from 'lucide-react/dist/esm/icons/check';
@@ -17,10 +17,11 @@ interface ToolItem {
 }
 
 const PaymentSuccess = () => {
-  const [status, setStatus] = React.useState<'loading' | 'success' | 'failed'>('loading');
-  const [orderId, setOrderId] = React.useState<string | null>(null);
-  const [purchasedTools, setPurchasedTools] = React.useState<ToolItem[]>([]);
-  const [errorMessage, setErrorMessage] = React.useState<string>('');
+  const [status, setStatus] = useState<'loading' | 'success' | 'failed'>('loading');
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [purchasedTools, setPurchasedTools] = useState<ToolItem[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -38,7 +39,8 @@ const PaymentSuccess = () => {
       queryParams.get('merchantTransactionId') || 
       queryParams.get('transactionId') || 
       queryParams.get('merchantOrderId') ||
-      queryParams.get('txnId');
+      queryParams.get('txnId') ||
+      queryParams.get('providerReferenceId');
     
     console.log('Extracted transaction ID from URL:', merchantTransactionId);
     
@@ -77,6 +79,13 @@ const PaymentSuccess = () => {
   // Helper function to process payment with a transaction ID
   const processPaymentWithTransactionId = async (transactionId: string) => {
     console.log(`Processing payment for transaction ID: ${transactionId}`);
+    
+    if (!user?.uid) {
+      console.error('User not authenticated, cannot process payment');
+      setStatus('failed');
+      setErrorMessage('You must be logged in to process payment. Please log in and try again.');
+      return;
+    }
     
     // Try our new direct verification and tool access function first
     const directResult = await verifyAndGrantAccess(transactionId);
@@ -123,6 +132,54 @@ const PaymentSuccess = () => {
     } 
     
     console.log('All automated verification methods failed:', result.error);
+    
+    // Try manual verification by extracting tool ID from transaction ID format
+    if (transactionId.startsWith('ord_')) {
+      try {
+        const parts = transactionId.split('_');
+        if (parts.length >= 3) {
+          const userId = parts[1];
+          const toolId = parts[2];
+          
+          if (userId === user.uid) {
+            // Check if user already has access to this tool
+            const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
+            const userToolDoc = await getDoc(userToolRef);
+            
+            if (userToolDoc.exists()) {
+              console.log('User already has access to this tool');
+              setPurchasedTools([{ id: toolId, name: 'Your Tool' }]);
+              setStatus('success');
+              return;
+            }
+            
+            // Create a transaction record for manual verification
+            const txnRef = doc(firestore, 'transactions', transactionId);
+            await setDoc(txnRef, {
+              userId,
+              toolId,
+              status: 'pending_verification',
+              merchantTransactionId: transactionId,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+            
+            // Try to grant access directly as a fallback
+            try {
+              await grantToolAccess(userId, toolId);
+              setPurchasedTools([{ id: toolId, name: 'Your Tool' }]);
+              setStatus('success');
+              return;
+            } catch (grantError) {
+              console.error('Failed to grant tool access:', grantError);
+            }
+          }
+        }
+      } catch (manualError) {
+        console.error('Manual verification failed:', manualError);
+      }
+    }
+    
     setStatus('failed');
     setErrorMessage(result.error || 'Payment verification failed');
   };
@@ -192,151 +249,148 @@ const PaymentSuccess = () => {
     }
   };
 
-  // Function to handle manual verification when automatic methods fail
-  const tryManualVerification = async (transactionId: string, userId: string) => {
+  // Helper function to grant tool access directly
+  const grantToolAccess = async (userId: string, toolId: string) => {
     try {
-      console.log('Attempting manual verification for transaction', transactionId);
+      // Add tool to user's tools collection
+      const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
+      await setDoc(userToolRef, {
+        activatedAt: serverTimestamp(),
+        toolId,
+        source: 'direct_activation'
+      });
+
+      // Also update the user's tools array for backward compatibility
+      const userRef = doc(firestore, 'users', userId);
+      await updateDoc(userRef, {
+        tools: arrayUnion(toolId),
+        updatedAt: serverTimestamp()
+      });
       
-      // Check if transaction ID follows our format (ord_userId_toolId_timestamp)
-      if (transactionId.startsWith('ord_')) {
-        const parts = transactionId.split('_');
-        if (parts.length >= 3) {
-          const toolId = parts[2];
-          console.log(`Extracted toolId=${toolId} from transaction ID`);
-          
-          // Try to verify if the user already has the tool (might have been granted but UI wasn't updated)
-          const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
-          const userToolDoc = await getDoc(userToolRef);
-          
-          if (userToolDoc.exists()) {
-            console.log('Tool was already granted to user, updating UI');
-            setPurchasedTools([{ id: toolId, name: 'Your Tool' }]);
-            setStatus('success');
-            return;
-          }
-          
-          // Try to manually create the transaction
-          const txnRef = doc(firestore, 'transactions', transactionId);
-          await updateDoc(txnRef, {
-            status: 'manual_verification',
-            updatedAt: serverTimestamp()
-          }).catch(async () => {
-            // If update fails, try to create the document
-            await txnRef.set({
-              userId,
-              toolId,
-              status: 'manual_verification',
-              merchantTransactionId: transactionId,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            });
-          });
-          
-          console.log('Created manual verification entry, waiting for admin approval');
-          setStatus('failed');
-          setErrorMessage('Your payment is being verified manually. Please contact support with your Order ID for immediate activation.');
-        }
-      }
+      console.log(`Successfully granted access to tool ${toolId} for user ${userId}`);
+      return true;
     } catch (error) {
-      console.error('Manual verification failed:', error);
-      // We already set the error state in the main function, so no need to update it here
+      console.error('Error granting tool access:', error);
+      throw error;
     }
   };
 
-  React.useEffect(() => {
+  // Function to retry verification
+  const handleRetryActivation = async () => {
+    setRetryCount(prev => prev + 1);
+    setStatus('loading');
+    
+    // Get the transaction ID from state or session storage
+    const txnId = orderId || sessionStorage.getItem('merchantTransactionId') || sessionStorage.getItem('lastTransactionId');
+    
+    if (txnId) {
+      try {
+        await processPaymentWithTransactionId(txnId);
+      } catch (error) {
+        console.error('Retry failed:', error);
+        setStatus('failed');
+        setErrorMessage('Verification failed. Please contact support with your Order ID.');
+      }
+    } else {
+      setStatus('failed');
+      setErrorMessage('No transaction ID available for retry.');
+    }
+  };
+
+  // Initial verification on component mount
+  useEffect(() => {
     validatePaymentAndActivateTools();
   }, [location.search, user]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-purple-950 to-gray-900">
-      <div className="max-w-md w-full mx-4">
-        <div className="bg-gray-800 rounded-xl p-8 text-center shadow-2xl">
+    <div className="container max-w-3xl mx-auto px-4 py-8 sm:py-12">
+      <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+        <div className="p-6 sm:p-10">
           {status === 'loading' && (
-            <>
+            <div className="text-center py-12">
               <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Activating Your Tools</h2>
-              <p className="text-gray-400">Please wait while we validate your payment and activate your tools...</p>
-            </>
+              <h2 className="text-2xl font-bold text-white mb-2">Verifying Payment</h2>
+              <p className="text-gray-400">Please wait while we verify your payment...</p>
+            </div>
           )}
-
+          
           {status === 'success' && (
-            <>
+            <div className="text-center py-8">
               <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Check className="h-8 w-8 text-white" />
+                <Check className="w-10 h-10 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Success!</h2>
-              <p className="text-gray-300 mb-6">Congratulations, your tools have been activated.</p>
+              <h2 className="text-2xl font-bold text-white mb-6">Payment Successful!</h2>
+              
+              {purchasedTools.length > 0 ? (
+                <div className="mb-8">
+                  <p className="text-lg text-gray-300 mb-4">You now have access to:</p>
+                  <ul className="space-y-3">
+                    {purchasedTools.map((tool, index) => (
+                      <li key={index} className="bg-gray-700 rounded-lg p-4 flex justify-between items-center">
+                        <span className="font-medium text-white">{tool.name}</span>
+                        <button 
+                          onClick={() => navigate(`/tool-access/${tool.id}`)}
+                          className="flex items-center text-sm bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md transition-colors"
+                        >
+                          Access Tool <ArrowRight className="ml-2 w-4 h-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-gray-300 mb-6">Your purchase was successful!</p>
+              )}
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button 
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-6 rounded-md transition-colors"
+                >
+                  Go to Dashboard
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {status === 'failed' && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <X className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-4">Activation Failed</h2>
+              <p className="text-gray-300 mb-6">{errorMessage}</p>
               
               {orderId && (
-                <div className="bg-gray-700/50 rounded-lg p-3 mb-6 border border-gray-700/50">
-                  <p className="text-gray-300 text-sm">Order ID: <span className="text-indigo-300 font-mono">{orderId}</span></p>
+                <div className="mb-6 p-4 bg-gray-700 rounded-lg">
+                  <p className="text-sm text-gray-300">Order ID: <span className="font-mono text-white">{orderId}</span></p>
                 </div>
               )}
               
-              {purchasedTools.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-medium text-white mb-3">Activated Tools</h3>
-                  <div className="bg-gray-700/50 rounded-lg p-3 border border-gray-700/50 text-left">
-                    {purchasedTools.map((tool: ToolItem, index: number) => (
-                      <div key={tool.id} className={`flex justify-between py-2 ${index !== purchasedTools.length - 1 ? 'border-b border-gray-600/50' : ''}`}>
-                        <span className="text-gray-300">{tool.name}</span>
-                        <span className="text-green-400">Activated</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <button
-                onClick={() => navigate('/dashboard/tools')}
-                className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
-              >
-                Go to your tools <ArrowRight className="h-4 w-4" />
-              </button>
-            </>
-          )}
-
-          {status === 'failed' && (
-            <>
-              <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                <X className="h-8 w-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Activation Failed</h2>
-              <p className="text-gray-300 mb-6">{errorMessage || "We couldn't activate your tools. Please contact support."}</p>
-              
-              <div className="flex flex-col space-y-4">
-                <button
-                  onClick={() => validatePaymentAndActivateTools()}
-                  className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <button 
+                  onClick={handleRetryActivation}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-6 rounded-md transition-colors"
+                  disabled={retryCount >= 3}
                 >
                   Retry Activation
                 </button>
-                
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="flex-1 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                  >
-                    Go to Dashboard
-                  </button>
-                  <button
-                    onClick={() => navigate('/')}
-                    className="flex-1 py-3 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
-                  >
-                    Back to Home
-                  </button>
-                </div>
-                
-                <a
-                  href={`https://wa.me/917982604809?text=Hello%2C%20I%20just%20made%20a%20payment%20but%20my%20tools%20were%20not%20activated%20automatically.%20My%20order%20ID%20is%20${orderId || 'unknown'}.`}
+                <button 
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-gray-700 hover:bg-gray-600 text-white py-3 px-6 rounded-md transition-colors"
+                >
+                  Go to Dashboard
+                </button>
+                <a 
+                  href="https://wa.me/+918010585959?text=I%20need%20help%20with%20my%20payment.%20Order%20ID:%20"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
+                  className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-md transition-colors"
                 >
                   Contact Support via WhatsApp
                 </a>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

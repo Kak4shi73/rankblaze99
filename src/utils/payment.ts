@@ -218,61 +218,72 @@ export const verifyAndGrantAccess = async (txnId: string): Promise<{success: boo
   try {
     console.log(`Verifying and granting access for transaction ${txnId}`);
     
-    // If transaction ID doesn't start with 'ord_', try to extract it from possible PhonePe formats
-    let transactionId = txnId;
-    
     // Store transaction attempt in session storage as fallback
-    sessionStorage.setItem('lastTransactionId', transactionId);
+    sessionStorage.setItem('lastTransactionId', txnId);
     
-    // Call the backend API to verify the payment and grant tool access
-    const response = await fetch(
-      `${API_BASE_URL}/verifyPhonePePayment`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ txnId: transactionId }),
-        credentials: 'include',
-        mode: 'cors'
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Verification and access grant failed with status ${response.status}:`, errorText);
-      
-      // If first attempt failed and transaction ID doesn't follow our format,
-      // try one more time with an alternative transaction ID format
-      if (!transactionId.startsWith('ord_')) {
-        console.log('Transaction ID does not follow our format, checking session storage for a valid ID');
-        const storedTxnId = sessionStorage.getItem('merchantTransactionId');
+    // Try multiple possible transaction ID formats
+    const transactionIds = [
+      txnId, 
+      sessionStorage.getItem('merchantTransactionId') || '',
+      sessionStorage.getItem('lastTransactionId') || ''
+    ].filter(id => id && id.length > 0);
+    
+    // Remove duplicates
+    const uniqueTransactionIds = [...new Set(transactionIds)];
+    
+    console.log('Attempting verification with transaction IDs:', uniqueTransactionIds);
+    
+    // Try each transaction ID until one succeeds
+    for (const transactionId of uniqueTransactionIds) {
+      try {
+        console.log(`Trying transaction ID: ${transactionId}`);
         
-        if (storedTxnId && storedTxnId !== transactionId) {
-          console.log(`Trying alternative transaction ID: ${storedTxnId}`);
-          return await verifyAndGrantAccess(storedTxnId);
+        // Call the backend API to verify the payment and grant tool access
+        const response = await fetch(
+          `${API_BASE_URL}/verifyPhonePePayment`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              txnId: transactionId,
+              merchantTransactionId: transactionId,
+              merchantOrderId: transactionId
+            }),
+            credentials: 'include',
+            mode: 'cors'
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Verification failed with status ${response.status} for ID ${transactionId}:`, errorText);
+          continue; // Try next transaction ID
         }
+
+        const data = await response.json();
+        console.log(`Verification response for ID ${transactionId}:`, data);
+
+        if (data.success) {
+          // If verification succeeded, store this transaction ID as the valid one
+          sessionStorage.setItem('validTransactionId', transactionId);
+          
+          return {
+            success: true,
+            message: data.message || 'Tool access granted successfully'
+          };
+        }
+      } catch (requestError) {
+        console.error(`Error making verification request for ID ${transactionId}:`, requestError);
+        // Continue to try next transaction ID
       }
-      
-      return {
-        success: false,
-        error: `Failed with status code ${response.status}: ${errorText}`
-      };
     }
-
-    const data = await response.json();
-    console.log('Verification response:', data);
-
-    if (!data.success) {
-      return {
-        success: false,
-        error: data.error || data.message || 'Failed to verify payment'
-      };
-    }
-
+    
+    // If we get here, all verification attempts failed
     return {
-      success: true,
-      message: data.message || 'Tool access granted successfully'
+      success: false,
+      error: 'Failed to verify payment with any available transaction ID'
     };
   } catch (error) {
     console.error('Error in verifyAndGrantAccess:', error);
@@ -355,144 +366,128 @@ export const processSuccessfulPayment = async (
 };
 
 /**
- * Automatically verify and process payment using all available methods
- * This provides a direct way to handle payment success and activation with comprehensive logging
+ * Auto-verify and process payment by checking status and granting tool access
  * @param merchantTransactionId - The merchant transaction ID
- * @param userId - The user ID (optional, will try to verify without it if not provided)
- * @returns Promise with processing result
+ * @param userId - The user ID (optional)
+ * @returns Promise with verification result
  */
 export const autoVerifyAndProcessPayment = async (
   merchantTransactionId: string,
   userId?: string
 ): Promise<{success: boolean; message?: string; error?: string}> => {
   try {
-    console.log(`Starting auto verification for transaction: ${merchantTransactionId}`);
+    console.log(`Auto-verifying payment for transaction ${merchantTransactionId}`);
     
-    // Step 1: Try the new direct verification and tool access endpoint
-    const directResult = await verifyAndGrantAccess(merchantTransactionId);
-    
-    if (directResult.success) {
-      console.log('Direct verification and access grant succeeded:', directResult.message);
-      return directResult;
-    }
-    
-    console.log('Direct verification failed, falling back to older methods:', directResult.error);
-    
-    // Step 2: Verify the payment status using the GET endpoint
+    // First try to verify payment status through the API
     const verificationResult = await verifyPaymentStatus(merchantTransactionId);
     
-    if (!verificationResult.success) {
-      console.error(`Payment verification failed for ${merchantTransactionId}:`, verificationResult.error);
+    if (verificationResult.success && verificationResult.state === 'COMPLETED') {
+      console.log('Payment verified as COMPLETED');
+      
+      // Extract user ID and tool ID from transaction ID if possible
+      // Format is typically: ord_userId_toolId_timestamp
+      let extractedUserId: string | undefined;
+      let extractedToolId: string | undefined;
+      
+      if (merchantTransactionId.startsWith('ord_')) {
+        const parts = merchantTransactionId.split('_');
+        if (parts.length >= 3) {
+          extractedUserId = parts[1];
+          extractedToolId = parts[2];
+          console.log(`Extracted userId=${extractedUserId} and toolId=${extractedToolId} from transaction ID`);
+        }
+      }
+      
+      // Use provided userId if available, otherwise use extracted one
+      const finalUserId = userId || extractedUserId;
+      
+      if (finalUserId && extractedToolId) {
+        try {
+          // Try to grant access directly
+          console.log(`Granting tool ${extractedToolId} access to user ${finalUserId}`);
+          
+          // Create a transaction record
+          const transactionData = {
+            userId: finalUserId,
+            toolId: extractedToolId,
+            status: 'completed',
+            merchantTransactionId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          
+          // Store in Firestore
+          try {
+            const txnRef = doc(firestore, 'transactions', merchantTransactionId);
+            await setDoc(txnRef, transactionData, { merge: true });
+            console.log('Transaction record created/updated in Firestore');
+          } catch (firestoreError) {
+            console.error('Error storing transaction in Firestore:', firestoreError);
+            // Continue anyway since this is just record keeping
+          }
+          
+          // Store in Realtime Database as backup
+          try {
+            const rtdbRef = ref(db, `transactions/${merchantTransactionId}`);
+            await set(rtdbRef, transactionData);
+            console.log('Transaction record created/updated in Realtime Database');
+          } catch (rtdbError) {
+            console.error('Error storing transaction in Realtime Database:', rtdbError);
+            // Continue anyway since this is just record keeping
+          }
+          
+          // Grant tool access to user
+          const userToolRef = doc(firestore, 'users', finalUserId, 'tools', extractedToolId);
+          await setDoc(userToolRef, {
+            activatedAt: new Date().toISOString(),
+            toolId: extractedToolId,
+            source: 'auto_verification'
+          });
+          
+          // Update user's tools array for backward compatibility
+          const userRef = doc(firestore, 'users', finalUserId);
+          await updateDoc(userRef, {
+            tools: firestoreArrayUnion(extractedToolId),
+            updatedAt: new Date().toISOString()
+          });
+          
+          console.log('Tool access granted successfully');
+          return {
+            success: true,
+            message: 'Payment verified and tool access granted'
+          };
+        } catch (accessError) {
+          console.error('Error granting tool access:', accessError);
+          return {
+            success: false,
+            error: 'Payment verified but failed to grant tool access'
+          };
+        }
+      } else {
+        console.error('Could not determine user ID or tool ID from transaction');
+        return {
+          success: false,
+          error: 'Payment verified but could not determine user or tool information'
+        };
+      }
+    } else if (verificationResult.success) {
+      console.log(`Payment verification returned non-completed state: ${verificationResult.state}`);
+      return {
+        success: false,
+        error: `Payment verification returned status: ${verificationResult.state}`
+      };
+    } else {
+      console.error('Payment verification failed:', verificationResult.error);
       return {
         success: false,
         error: verificationResult.error || 'Payment verification failed'
       };
     }
-    
-    console.log(`Payment verification successful for ${merchantTransactionId}`);
-    
-    // Step 3: If userId is not provided, try to find it from the transaction data
-    let actualUserId = userId;
-    if (!actualUserId) {
-      try {
-        // Try to get userId from Realtime Database
-        const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
-        const transactionSnapshot = await get(transactionRef);
-        
-        if (transactionSnapshot.exists()) {
-          const transaction = transactionSnapshot.val();
-          if (transaction.userId) {
-            actualUserId = transaction.userId;
-            console.log(`Found userId ${actualUserId} in transaction data`);
-          }
-        }
-        
-        // If still not found, check Firestore
-        if (!actualUserId) {
-          const userPurchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
-          const userPurchaseSnapshot = await getDoc(userPurchaseRef);
-          
-          if (userPurchaseSnapshot.exists()) {
-            const purchaseData = userPurchaseSnapshot.data();
-            if (purchaseData.userId) {
-              actualUserId = purchaseData.userId;
-              console.log(`Found userId ${actualUserId} in user_purchases collection`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error finding userId:', error);
-        // Continue execution even if we can't find userId
-      }
-    }
-    
-    if (!actualUserId) {
-      return {
-        success: false,
-        error: 'User ID not found for this transaction'
-      };
-    }
-    
-    // Step 4: Get the tools associated with this transaction
-    let toolIds: string[] = [];
-    
-    // Check Realtime Database first
-    const transactionRef = ref(db, `transactions/${merchantTransactionId}`);
-    const transactionSnapshot = await get(transactionRef);
-    
-    if (transactionSnapshot.exists()) {
-      const transaction = transactionSnapshot.val();
-      
-      if (transaction.tools && Array.isArray(transaction.tools)) {
-        toolIds = transaction.tools.map((tool: any) => tool.id);
-      } else if (transaction.toolId) {
-        toolIds = [transaction.toolId];
-      }
-      
-      console.log(`Found ${toolIds.length} tools in transaction data:`, toolIds);
-    } 
-    
-    // If no tools found in Realtime DB, check Firestore
-    if (toolIds.length === 0) {
-      const userPurchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
-      const userPurchaseSnapshot = await getDoc(userPurchaseRef);
-      
-      if (userPurchaseSnapshot.exists()) {
-        const purchaseData = userPurchaseSnapshot.data();
-        if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
-          toolIds = purchaseData.tools.map((tool: any) => tool.id);
-        }
-        
-        console.log(`Found ${toolIds.length} tools in user_purchases collection:`, toolIds);
-      }
-    }
-    
-    if (toolIds.length === 0) {
-      return {
-        success: false,
-        error: 'No tools found for this transaction'
-      };
-    }
-    
-    // Step 5: Process the successful payment
-    const processingResult = await processSuccessfulPayment(merchantTransactionId, actualUserId, toolIds);
-    
-    if (!processingResult) {
-      return {
-        success: false,
-        error: 'Failed to process the payment and activate tools'
-      };
-    }
-    
-    return {
-      success: true,
-      message: `Successfully activated ${toolIds.length} tools for user ${actualUserId}`
-    };
   } catch (error) {
-    console.error('Error in auto verification and processing:', error);
+    console.error('Error in auto verification process:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
+      error: error instanceof Error ? error.message : 'Unknown error in payment verification'
     };
   }
 };

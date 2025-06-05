@@ -164,17 +164,25 @@ app.post('/initializePhonePePayment', async (req, res) => {
   }
 });
 
-// Verify payment status route
-app.get('/verifyPhonePePayment', async (req, res) => {
+// Verify payment status route - enhanced to handle both GET and POST requests
+app.all('/verifyPhonePePayment', async (req, res) => {
   try {
-    const { merchantOrderId } = req.query;
+    console.log(`📋 PhonePe verification request: ${req.method}`, req.method === 'POST' ? req.body : req.query);
+    
+    // Extract transaction ID from either query params (GET) or request body (POST)
+    const merchantOrderId = req.method === 'POST' 
+      ? req.body.txnId || req.body.merchantTransactionId || req.body.merchantOrderId
+      : req.query.merchantOrderId || req.query.txnId || req.query.merchantTransactionId;
 
     if (!merchantOrderId) {
+      console.error("❌ Missing transaction ID in request");
       return res.status(400).json({
         success: false,
-        error: "Missing merchantOrderId"
+        error: "Missing transaction ID"
       });
     }
+
+    console.log(`🔍 Verifying payment for transaction: ${merchantOrderId}`);
 
     // PhonePe SDK
     const sdkModule = require('pg-sdk-node');
@@ -187,16 +195,90 @@ app.get('/verifyPhonePePayment', async (req, res) => {
     const env = process.env.NODE_ENV === 'production' ? Env.PRODUCTION : Env.SANDBOX;
     
     const client = StandardCheckoutClient.getInstance(clientId, clientSecret, clientVersion, env);
-    const response = await client.getOrderStatus(merchantOrderId);
     
+    // Get payment status from PhonePe
+    console.log("📞 Calling PhonePe API to verify payment status");
+    const response = await client.getOrderStatus(merchantOrderId);
+    console.log("📊 PhonePe status response:", response);
+    
+    // Check if payment was successful
+    const isSuccess = response.code === "PAYMENT_SUCCESS" || response.state === "COMPLETED";
+    
+    // If this is a POST request, also update Firestore and grant tool access
+    if (req.method === 'POST' && isSuccess) {
+      console.log("💰 Payment successful, updating database records");
+      
+      try {
+        // Check if transaction ID follows our format (ord_userId_toolId_timestamp)
+        if (merchantOrderId.startsWith('ord_')) {
+          const parts = merchantOrderId.split('_');
+          if (parts.length >= 3) {
+            const userId = parts[1];
+            const toolId = parts[2];
+            
+            console.log(`🔑 Extracted userId=${userId} and toolId=${toolId} from transaction ID`);
+            
+            // Get Firestore reference
+            const admin = require('firebase-admin');
+            if (admin.apps.length === 0) {
+              admin.initializeApp();
+            }
+            const db = admin.firestore();
+            
+            // Create or update transaction record
+            const txnRef = db.collection('transactions').doc(merchantOrderId);
+            await txnRef.set({
+              userId,
+              toolId,
+              status: 'completed',
+              merchantTransactionId: merchantOrderId,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            
+            // Grant tool access to user
+            const userToolRef = db.collection('users').doc(userId).collection('tools').doc(toolId);
+            await userToolRef.set({
+              activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              toolId,
+              source: 'api_verification'
+            }, { merge: true });
+            
+            // Update user's tools array for backward compatibility
+            const userRef = db.collection('users').doc(userId);
+            await userRef.update({
+              tools: admin.firestore.FieldValue.arrayUnion(toolId),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log(`✅ Successfully granted access to tool ${toolId} for user ${userId}`);
+            
+            return res.status(200).json({
+              success: true,
+              state: response.state,
+              code: response.code,
+              message: "Tool access granted successfully",
+              userId,
+              toolId
+            });
+          }
+        }
+      } catch (dbError) {
+        console.error("💥 Database error while granting access:", dbError);
+        // Continue to return payment status even if DB update fails
+      }
+    }
+    
+    // Return payment status for both GET and POST requests
     return res.status(200).json({
       success: true,
       state: response.state,
       code: response.code,
-      message: response.message
+      message: response.message,
+      isPaymentSuccess: isSuccess
     });
   } catch (error) {
-    console.error("Error verifying payment:", error);
+    console.error("💥 Error verifying payment:", error);
     return res.status(500).json({
       success: false,
       error: error.message || "Failed to verify payment"

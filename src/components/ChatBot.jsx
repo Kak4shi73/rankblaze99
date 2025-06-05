@@ -67,8 +67,7 @@ const ChatBot = ({ isOpen, onToggle }) => {
       // Variations and common misspellings
       'fuk', 'fck', 'sht', 'btch', 'stpd', 'looser', 'waist',
       'madarchod', 'mc', 'maderchod', 'bhosadike', 'bhosdike', 'chutia',
-      'ganduuu', 'chutiyaa', 'bhenchodd', 'madarchod', 'bc',
-      
+      'ganduuu', 'chutiyaa', 'bhenchodd', 'madarchod', 'bc', 'laude',     
       // Negative sentiment phrases
       'hate rankblaze', 'rankblaze worst', 'never use rankblaze', 'avoid rankblaze',
       'rankblaze fake', 'dont trust rankblaze', 'rankblaze cheat', 'rankblaze loot',
