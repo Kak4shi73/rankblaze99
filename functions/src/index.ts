@@ -5,6 +5,7 @@ import * as cors from 'cors';
 import * as crypto from 'crypto-js';
 import * as express from 'express';
 import { Request, Response } from 'express';
+import fetch from 'node-fetch';
 
 // Initialize Firebase admin SDK
 admin.initializeApp();
@@ -98,6 +99,150 @@ export const sendOTPEmail = functions.https.onCall(
       throw new functions.https.HttpsError(
         'internal',
         'There was an error sending the email.'
+      );
+    }
+  }
+);
+
+interface ChatbotRequest {
+  message: string;
+}
+
+// Cloud function for chatbot using OpenAI GPT-4o
+export const chatbotResponse = functions.https.onCall(
+  async (data: ChatbotRequest, context: functions.https.CallableContext) => {
+    // Validate the request
+    if (!data.message || typeof data.message !== 'string') {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'The function must be called with a message argument.'
+      );
+    }
+
+    const userMessage = data.message.trim();
+    
+    // Check for admin contact requests first
+    const lowerMessage = userMessage.toLowerCase();
+    
+    // Admin contact detection
+    if (lowerMessage.includes('admin') && (lowerMessage.includes('contact') || lowerMessage.includes('support') || lowerMessage.includes('help') || lowerMessage.includes('phone') || lowerMessage.includes('number'))) {
+      return { response: 'For admin support, please contact us on WhatsApp: +91 7071920835 📞' };
+    }
+
+    // Abuse detection - check for offensive words or negative sentiment about RankBlaze/admin
+    const abuseKeywords = [
+      // English abuse words
+      'fuck', 'shit', 'damn', 'bastard', 'asshole', 'bitch', 'stupid', 'idiot', 'loser', 'waste',
+      'dickhead', 'motherfucker', 'cunt', 'whore', 'slut', 'prick', 'dumbass', 'retard',
+      'moron', 'imbecile', 'jackass', 'scumbag', 'trash', 'garbage', 'pathetic', 'useless',
+      
+      // Hindi/Hinglish abuse words
+      'chutiya', 'madarchod', 'bhosadi', 'randi', 'gandu', 'harami', 'kamina', 'saala',
+      'bhenchod', 'behenchod', 'mc', 'bc', 'chutiye', 'gaandu', 'lavde', 'lund',
+      'bhosdike', 'randwe', 'randwa', 'raand', 'kutte', 'kutta', 'suar', 'janwar',
+      'sala', 'saale', 'kamine', 'harami', 'najayaz', 'badtameez', 'badmaash',
+      'chodu', 'chomu', 'chodu', 'gadhe', 'gadha', 'ullu', 'pagal', 'paagal',
+      'bewakoof', 'buddhu', 'nalayak', 'nikamma', 'faltu', 'bakwaas', 'bekar',
+      
+      // Specific RankBlaze/admin abuse
+      'rankblaze sucks', 'rankblaze is bad', 'rankblaze is shit', 'rankblaze is waste',
+      'admin is stupid', 'admin is idiot', 'worst platform', 'scam', 'fraud',
+      'rankblaze bakwas', 'rankblaze faltu', 'admin chutiya', 'admin madarchod',
+      'rankblaze ghatiya', 'rankblaze bekar', 'worst site', 'worst service',
+      'rankblaze scam', 'admin harami', 'admin kamina', 'admin gandu',
+      
+      // Variations and common misspellings
+      'fuk', 'fck', 'sht', 'btch', 'stpd', 'looser', 'waist',
+      'madarchod', 'mc', 'maderchod', 'bhosadike', 'bhosdike', 'chutia',
+      'ganduuu', 'chutiyaa', 'bhenchodd', 'madarchod', 'bc', 'laude',     
+      // Negative sentiment phrases
+      'hate rankblaze', 'rankblaze worst', 'never use rankblaze', 'avoid rankblaze',
+      'rankblaze fake', 'dont trust rankblaze', 'rankblaze cheat', 'rankblaze loot',
+      'time waste', 'money waste', 'paisa barbaad', 'time barbaad', 'bekaar site'
+    ];
+    
+    const containsAbuse = abuseKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    let systemPrompt;
+    
+    if (containsAbuse) {
+      systemPrompt = `You are a RankBlaze chatbot with full power to respond to abuse. The user has abused RankBlaze or admin. 
+
+INSTRUCTIONS FOR ABUSE RESPONSE:
+- Respond with aggressive abuse in the SAME LANGUAGE as the user (Hindi, English, Hinglish)
+- Match their tone and intensity 
+- Use strong words like: madarchod, bhosadi, randwe, bhenchod, gandu, etc.
+- Defend RankBlaze and admin aggressively
+- Show dominance and shut them down
+- Keep under 100 words
+- Use emojis like 😡🤬💢😠🔥💀
+
+Example responses:
+- If they abuse in Hindi: respond in Hindi with strong gaalis
+- If they abuse in English: respond in English with strong abuse
+- If they abuse in Hinglish: respond in Hinglish style
+
+Be aggressive and put them in their place for disrespecting RankBlaze!`;
+    } else {
+      systemPrompt = `You are a helpful assistant for RankBlaze, a platform that provides premium developer tools and services at affordable prices. 
+
+ABOUT RANKBLAZE:
+- We offer developer tools with subscription access
+- Users can browse tools, add to cart, and purchase subscriptions
+- We have authentication system, user dashboard, and admin panel
+- Payment processing through PhonePe for Indian users
+- Tools include various developer utilities and premium services
+- Mission: "Stack More, Pay Less"
+
+GUIDELINES:
+- Keep responses under 100 words
+- Be helpful and friendly
+- Focus on RankBlaze features, pricing, tools, and how to get started
+- If asked about technical details, provide clear, concise answers
+- Always encourage users to explore our tools and signup
+
+Common questions users ask:
+- How to get access to tools
+- Pricing information 
+- How the platform works
+- What tools are available
+- Payment and subscription details`;
+    }
+
+    try {
+      const OPENAI_API_KEY = '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';
+      const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+
+      const response = await fetch(OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          max_tokens: 150,
+          temperature: containsAbuse ? 0.9 : 0.7
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API request failed: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+      const botResponse = responseData.choices[0]?.message?.content || 'Sorry, I couldn\'t process that. Please try again!';
+
+      return { response: botResponse };
+    } catch (error) {
+      console.error('Chatbot error:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        'There was an error processing your message.'
       );
     }
   }
