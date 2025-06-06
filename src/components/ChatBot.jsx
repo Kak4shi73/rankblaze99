@@ -30,9 +30,9 @@ const ChatBot = ({ isOpen, onToggle }) => {
     return null;
   };
 
-  const getDeepseekResponse = async (userMessage) => {
-    const DEEPSEEK_API_KEY = 'sk-622742d539f64398800f162dd0ac6f04';
-    const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
+  const getOpenAIResponse = async (userMessage) => {
+    const OPENAI_API_KEY = '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';
+    const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
     // Check for admin contact requests first
     const lowerMessage = userMessage.toLowerCase();
@@ -123,14 +123,14 @@ Common questions users ask:
     }
 
     try {
-      const response = await fetch(DEEPSEEK_API_URL, {
+      const response = await fetch(OPENAI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'deepseek-chat',
+          model: 'gpt-4o',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage }
@@ -147,7 +147,7 @@ Common questions users ask:
       const data = await response.json();
       return data.choices[0]?.message?.content || 'Sorry, I couldn\'t process that. Please try again!';
     } catch (error) {
-      console.error('Deepseek API error:', error);
+      console.error('OpenAI API error:', error);
       return 'I\'m having trouble connecting right now. Please try again later or contact our support team.';
     }
   };
@@ -171,7 +171,7 @@ Common questions users ask:
     setIsLoading(true);
 
     try {
-      const botResponse = await getDeepseekResponse(userMessage.text);
+      const botResponse = await getOpenAIResponse(userMessage.text);
       
       const botMessage = {
         id: (Date.now() + 1).toString(),
