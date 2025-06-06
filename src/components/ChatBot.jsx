@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import { CHATBOT_CONFIG } from '../config/chatbot.js';
 
 const ChatBot = ({ isOpen, onToggle }) => {
   const [messages, setMessages] = useState([
@@ -31,8 +32,6 @@ const ChatBot = ({ isOpen, onToggle }) => {
   };
 
   const getOpenAIResponse = async (userMessage) => {
-    const OPENAI_API_KEY = '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';
-    const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
     // Check for admin contact requests first
     const lowerMessage = userMessage.toLowerCase();
@@ -123,20 +122,20 @@ Common questions users ask:
     }
 
     try {
-      const response = await fetch(OPENAI_API_URL, {
+      const response = await fetch(CHATBOT_CONFIG.OPENAI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`
+          'Authorization': `Bearer ${CHATBOT_CONFIG.OPENAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: CHATBOT_CONFIG.MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage }
           ],
-          max_tokens: 150,
-          temperature: containsAbuse ? 0.9 : 0.7
+          max_tokens: CHATBOT_CONFIG.MAX_TOKENS,
+          temperature: containsAbuse ? CHATBOT_CONFIG.TEMPERATURE_ABUSE : CHATBOT_CONFIG.TEMPERATURE_NORMAL
         })
       });
 
