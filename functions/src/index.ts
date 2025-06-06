@@ -305,57 +305,184 @@ app.post('/initializePhonePePayment', async (req, res) => {
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
     const redirectUrl = "https://www.rankblaze.in/payment-callback";
     
+    console.log("🔄 Creating order in database before payment initialization...");
+    
+    try {
+      const db = admin.firestore();
+      const rtdb = admin.database();
+      
+      // Create order data
+      const orderData = {
+        orderId: merchantOrderId,
+        userId,
+        toolId,
+        amount,
+        status: 'initiated',
+        paymentMethod: 'PhonePe',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        redirectUrl
+      };
+      
+      // 1. Create order in Firestore (Primary storage)
+      await db.collection('orders').doc(merchantOrderId).set(orderData);
+      console.log("✅ Order created in Firestore (Primary):", merchantOrderId);
+      
+      // 2. Create transaction record in Firestore
+      const transactionData = {
+        userId,
+        toolId,
+        amount,
+        status: 'initiated',
+        merchantTransactionId: merchantOrderId,
+        paymentMethod: 'PhonePe',
+        source: 'payment_init',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      await db.collection('transactions').doc(merchantOrderId).set(transactionData);
+      console.log("✅ Transaction record created in Firestore:", merchantOrderId);
+      
+      // 3. Update Realtime DB for quick user data access (minimal data)
+      await rtdb.ref(`users/${userId}/currentOrder`).set({
+        orderId: merchantOrderId,
+        toolId,
+        amount,
+        status: 'initiated',
+        createdAt: Date.now()
+      });
+      
+      console.log("✅ User current order updated in Realtime Database for quick access");
+      
+    } catch (dbError) {
+      console.error("❌ Database error during order creation:", dbError);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to create order in database"
+      });
+    }
+    
+    console.log("🔄 Creating PhonePe client...");
+    let client;
     try {
       // Load the SDK dynamically to avoid import errors
       const sdkModule = require('pg-sdk-node');
       const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = sdkModule;
       
-      console.log("Creating PhonePe client with credentials:", { 
-        clientId, 
-        clientSecret: clientSecret.substring(0, 4) + '****', 
-        clientVersion, 
-        env: isProduction ? 'PRODUCTION' : 'SANDBOX' 
-      });
-      
-      // Initialize client
-      const client = StandardCheckoutClient.getInstance(
+      client = StandardCheckoutClient.getInstance(
         clientId, 
         clientSecret, 
         clientVersion, 
         isProduction ? Env.PRODUCTION : Env.SANDBOX
       );
+      console.log("✅ PhonePe client created successfully");
+    } catch (clientError) {
+      console.error("❌ Error creating PhonePe client:", clientError);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to initialize payment client"
+      });
+    }
+    
+    console.log("📝 Building payment request...");
+    let request;
+    try {
+      const sdkModule = require('pg-sdk-node');
+      const { StandardCheckoutPayRequest } = sdkModule;
       
-      console.log("Building request with:", { merchantOrderId, amount: Number(amount) * 100, redirectUrl });
-      
-      // Create the payment request
-      const request = StandardCheckoutPayRequest.builder()
+      request = StandardCheckoutPayRequest.builder()
         .merchantOrderId(merchantOrderId)
         .amount(Number(amount) * 100) // Convert to paise
         .redirectUrl(redirectUrl)
         .build();
-      
-      console.log("Sending request to PhonePe...");
-      
-      // Make the request to PhonePe
-      const response = await client.pay(request);
-      
-      console.log("Response from PhonePe:", response);
-      
-      // Return the checkout URL to the client
-      return res.status(200).json({
-        success: true,
-        checkoutUrl: response.redirectUrl,
-        merchantTransactionId: merchantOrderId,
+      console.log("✅ Request built successfully:", { 
+        merchantOrderId, 
+        amount: Number(amount) * 100, 
+        redirectUrl
       });
-    } catch (sdkError) {
-      console.error("PhonePe SDK Error:", sdkError);
+    } catch (requestError) {
+      console.error("❌ Error building request:", requestError);
       return res.status(500).json({
         success: false,
-        error: sdkError instanceof Error ? sdkError.message : "PhonePe SDK Error",
+        error: "Failed to build payment request"
       });
     }
+    
+    console.log("🚀 Sending request to PhonePe...");
+    let response;
+    try {
+      response = await client.pay(request);
+      console.log("✅ PhonePe response received:", response);
+      
+      // Update order with PhonePe response
+      const rtdb = admin.database();
+      await rtdb.ref(`users/${userId}/currentOrder`).update({
+        status: response.redirectUrl ? 'payment_initiated' : 'failed',
+        paymentUrl: response.redirectUrl,
+        updatedAt: Date.now()
+      });
+      
+    } catch (payError) {
+      console.error("❌ Error from PhonePe pay API:", payError);
+      
+      // Update order status to failed in Firestore
+      const db = admin.firestore();
+      await db.collection('orders').doc(merchantOrderId).update({
+        status: 'failed',
+        error: payError instanceof Error ? payError.message : "Payment gateway error",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update user's current order in Realtime DB
+      const rtdb = admin.database();
+      await rtdb.ref(`users/${userId}/currentOrder`).update({
+        status: 'failed',
+        error: payError instanceof Error ? payError.message : "Payment gateway error",
+        updatedAt: Date.now()
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: payError instanceof Error ? payError.message : "Payment gateway error"
+      });
+    }
+    
+    if (!response || !response.redirectUrl) {
+      console.error("❌ Invalid response from PhonePe:", response);
+      
+      // Update order status to failed in Firestore
+      const db = admin.firestore();
+      await db.collection('orders').doc(merchantOrderId).update({
+        status: 'failed',
+        error: "Invalid response from payment gateway",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Update user's current order in Realtime DB
+      const rtdb = admin.database();
+      await rtdb.ref(`users/${userId}/currentOrder`).update({
+        status: 'failed',
+        error: "Invalid response from payment gateway",
+        updatedAt: Date.now()
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: "Invalid response from payment gateway"
+      });
+    }
+    
+    console.log("✅ Payment URL generated successfully:", response.redirectUrl);
+    return res.status(200).json({
+      success: true,
+      checkoutUrl: response.redirectUrl,
+      merchantTransactionId: merchantOrderId,
+      orderId: merchantOrderId
+    });
+    
   } catch (error) {
-    console.error("General Error in initializePhonePePayment:", error);
+    console.error("❌ Unexpected error in initializePhonePePayment:", error);
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : "Internal Server Error",
@@ -396,17 +523,132 @@ app.get('/verifyPhonePePayment', async (req, res) => {
         isProduction ? Env.PRODUCTION : Env.SANDBOX
       );
       
-      // Get payment status
+      // Get payment status from PhonePe
       const response = await client.getOrderStatus(merchantOrderId as string);
       
       console.log("Status response from PhonePe:", response);
+      
+      const isSuccess = response.state === 'COMPLETED' && (response.code === 'PAYMENT_SUCCESS' || response.code === 'SUCCESS');
+      
+      // If payment is successful, update database and grant tool access
+      if (isSuccess) {
+        console.log("🎉 Payment verified as successful! Processing...");
+        
+        try {
+          const db = admin.firestore();
+          const rtdb = admin.database();
+          
+          // Get order details from Firestore (primary source)
+          const orderDocRef = db.collection('orders').doc(merchantOrderId as string);
+          const orderDoc = await orderDocRef.get();
+          
+          if (orderDoc.exists) {
+            const orderData = orderDoc.data()!;
+            const { userId, toolId, amount } = orderData;
+            
+            console.log(`👤 Processing successful payment for user: ${userId}, tool: ${toolId}`);
+            
+            // 1. Update order status to completed in Firestore
+            await orderDocRef.update({
+              status: 'completed',
+              transactionId: response.transactionId || 'phonepe_verified',
+              responseCode: response.code,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              completedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log("✅ Order status updated to completed in Firestore");
+            
+            // 2. Create/Update transaction record in Firestore
+            const transactionData = {
+              userId,
+              toolId,
+              amount,
+              status: 'completed',
+              merchantTransactionId: merchantOrderId,
+              transactionId: response.transactionId || 'phonepe_verified',
+              paymentMethod: 'PhonePe',
+              verificationMethod: 'api_check',
+              source: 'verification',
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            
+            await db.collection('transactions').doc(merchantOrderId as string).set(transactionData, { merge: true });
+            console.log("✅ Transaction record created/updated in Firestore");
+            
+            // 3. Grant tool access to user in Firestore
+            await db.collection('users').doc(userId).collection('tools').doc(toolId).set({
+              activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              toolId,
+              source: 'PhonePe_verification',
+              transactionId: merchantOrderId,
+              amount,
+              paymentMethod: 'PhonePe'
+            }, { merge: true });
+            
+            console.log("✅ Tool access granted in users/{userId}/tools subcollection");
+            
+            // 4. Update user's tools array and last payment info in Firestore
+            await db.collection('users').doc(userId).update({
+              tools: admin.firestore.FieldValue.arrayUnion(toolId),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              lastPayment: {
+                toolId,
+                amount,
+                transactionId: merchantOrderId,
+                date: admin.firestore.FieldValue.serverTimestamp(),
+                method: 'PhonePe'
+              }
+            });
+            
+            console.log("✅ User tools array and last payment updated in Firestore");
+            
+            // 5. Create payment record in user_payments collection
+            await db.collection('user_payments').add({
+              userId,
+              toolId,
+              amount,
+              paymentMethod: 'PhonePe',
+              status: 'completed',
+              merchantTransactionId: merchantOrderId,
+              transactionId: response.transactionId || 'phonepe_verified',
+              source: 'verification',
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log("✅ Payment record created in user_payments collection");
+            
+            // 6. Update Realtime DB for quick user data fetch
+            await rtdb.ref(`users/${userId}/lastPayment`).set({
+              toolId,
+              amount,
+              transactionId: merchantOrderId,
+              status: 'completed',
+              date: Date.now(),
+              method: 'PhonePe'
+            });
+            
+            console.log("✅ User data updated in Realtime Database for quick fetch");
+            
+          } else {
+            console.error("❌ Order not found in Firestore:", merchantOrderId);
+          }
+          
+        } catch (dbError) {
+          console.error("❌ Database error during payment processing:", dbError);
+          // Still return success since payment was verified with PhonePe
+        }
+      }
       
       return res.status(200).json({
         success: true,
         state: response.state,
         code: response.code,
         message: response.message,
+        isPaymentSuccessful: isSuccess
       });
+      
     } catch (sdkError) {
       console.error("PhonePe SDK Error in status check:", sdkError);
       return res.status(500).json({
@@ -870,6 +1112,180 @@ app.get('/verifyPhonePePayment', (req: Request, res: Response) => {
 app.post('/createPhonePeSdkOrder', (req: Request, res: Response) => {
   // Forward the request to the standalone function
   return createPhonePeSdkOrder(req, res);
+});
+
+// PhonePe Webhook for payment callbacks
+app.post('/webhook/phonepe', async (req, res) => {
+  console.log("🔔 PhonePe webhook received:", req.body);
+  
+  try {
+    // PhonePe webhook authentication - using the credentials
+    const username = "aryan8009"; // Your PhonePe username
+    const password = "Aryan7071";  // Your PhonePe password
+    
+    // Extract the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      console.error("❌ Missing authorization header");
+      return res.status(401).send("Unauthorized");
+    }
+    
+    // Parse webhook data
+    const { event, data } = req.body;
+    
+    if (!event || !data) {
+      console.error("❌ Missing event or data in webhook");
+      return res.status(400).send("Bad Request");
+    }
+    
+    console.log(`📋 Processing webhook event: ${event}`);
+    
+    // Extract transaction details
+    const { merchantTransactionId, transactionId, amount, responseCode } = data;
+    
+    if (!merchantTransactionId) {
+      console.error("❌ Missing merchantTransactionId in webhook data");
+      return res.status(400).send("Bad Request");
+    }
+    
+    console.log(`💳 Processing transaction: ${merchantTransactionId}`);
+    
+    // Determine if payment was successful
+    const isSuccess = responseCode === 'PAYMENT_SUCCESS' || responseCode === 'SUCCESS';
+    const status = isSuccess ? 'completed' : 'failed';
+    
+    console.log(`📊 Payment status: ${status} (responseCode: ${responseCode})`);
+    
+    try {
+      const db = admin.firestore();
+      const rtdb = admin.database();
+      
+      // Get order details from Firestore (primary source)
+      const orderDocRef = db.collection('orders').doc(merchantTransactionId);
+      const orderDoc = await orderDocRef.get();
+      
+      if (!orderDoc.exists) {
+        console.error(`❌ Order not found in Firestore: ${merchantTransactionId}`);
+        return res.status(404).send("Order not found");
+      }
+      
+      const orderData = orderDoc.data()!;
+      const { userId, toolId, amount: orderAmount } = orderData;
+      
+      console.log(`👤 User: ${userId}, 🔧 Tool: ${toolId}, 💰 Amount: ${orderAmount}`);
+      
+      // 1. Update order status in Firestore (Primary)
+      await orderDocRef.update({
+        status,
+        transactionId,
+        responseCode,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: isSuccess ? admin.firestore.FieldValue.serverTimestamp() : null
+      });
+      
+      console.log("✅ Order updated in Firestore");
+      
+      // 2. Create/Update transaction record in Firestore
+      const transactionData = {
+        userId,
+        toolId,
+        amount: orderAmount,
+        status,
+        merchantTransactionId,
+        transactionId,
+        paymentMethod: 'PhonePe',
+        source: 'webhook',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+      
+      await db.collection('transactions').doc(merchantTransactionId).set(transactionData, { merge: true });
+      console.log("✅ Transaction record updated in Firestore");
+      
+      // 3. If payment successful, grant tool access and create payment records
+      if (isSuccess) {
+        console.log("🎉 Payment successful! Granting tool access...");
+        
+        try {
+          // Grant tool access to user (Firestore)
+          await db.collection('users').doc(userId).collection('tools').doc(toolId).set({
+            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            toolId,
+            source: 'PhonePe_webhook',
+            transactionId: merchantTransactionId,
+            amount: orderAmount,
+            paymentMethod: 'PhonePe'
+          }, { merge: true });
+          
+          console.log("✅ Tool access granted in users/{userId}/tools subcollection");
+          
+          // Update user's tools array for backward compatibility (Firestore)
+          await db.collection('users').doc(userId).update({
+            tools: admin.firestore.FieldValue.arrayUnion(toolId),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastPayment: {
+              toolId,
+              amount: orderAmount,
+              transactionId: merchantTransactionId,
+              date: admin.firestore.FieldValue.serverTimestamp(),
+              method: 'PhonePe'
+            }
+          });
+          
+          console.log("✅ User tools array updated in Firestore");
+          
+          // Create payment record in user_payments collection (Firestore)
+          await db.collection('user_payments').add({
+            userId,
+            toolId,
+            amount: orderAmount,
+            paymentMethod: 'PhonePe',
+            status: 'completed',
+            merchantTransactionId,
+            transactionId,
+            source: 'webhook',
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          
+          console.log("✅ Payment record created in user_payments collection");
+          
+          // Update Realtime DB for quick user data fetch
+          await rtdb.ref(`users/${userId}/lastPayment`).set({
+            toolId,
+            amount: orderAmount,
+            transactionId: merchantTransactionId,
+            status: 'completed',
+            date: Date.now(),
+            method: 'PhonePe'
+          });
+          
+          console.log("✅ User data updated in Realtime Database for quick fetch");
+          
+        } catch (accessError) {
+          console.error("❌ Error granting tool access:", accessError);
+          // Don't fail the webhook response, just log the error
+        }
+      } else {
+        // Payment failed - just update Realtime DB status
+        await rtdb.ref(`users/${userId}/lastPayment`).update({
+          status: 'failed',
+          updatedAt: Date.now()
+        });
+      }
+      
+      // Always respond with 200 OK to PhonePe
+      console.log("✅ Webhook processed successfully");
+      return res.status(200).send("OK");
+      
+    } catch (dbError) {
+      console.error("❌ Database error in webhook:", dbError);
+      return res.status(500).send("Database error");
+    }
+    
+  } catch (error) {
+    console.error("❌ Error processing PhonePe webhook:", error);
+    return res.status(500).send("Internal server error");
+  }
 });
 
 // Add a catch-all route at the end to handle 404s

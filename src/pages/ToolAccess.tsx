@@ -36,42 +36,42 @@ const TOOL_INFO: ToolInfoMap = {
     name: 'ChatGPT Plus',
     icon: '🤖',
     description: 'Access to advanced AI capabilities and GPT-4',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://chat.openai.com/'
   },
   envato_elements: {
     name: 'Envato Elements',
     icon: '🎨',
     description: 'Unlimited downloads of templates, photos, graphics, and more',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://elements.envato.com/'
   },
   canva_pro: {
     name: 'Canva Pro',
     icon: '✏️',
     description: 'Design anything with premium templates and assets',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://www.canva.com/'
   },
   storyblocks: {
     name: 'Storyblocks',
     icon: '🎬',
     description: 'Access to royalty-free video, audio, and images',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://www.storyblocks.com/'
   },
   semrush: {
     name: 'SEMrush',
     icon: '📈',
     description: 'Advanced SEO and competitive analysis tools',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://www.semrush.com/'
   },
   stealth_writer: {
     name: 'Stealth Writer',
     icon: '✍️',
     description: 'Advanced AI content creation tool with plagiarism avoidance',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://stealthwriter.ai/',
     useIdPassword: true // This tool uses ID and password instead of token
   },
@@ -79,7 +79,7 @@ const TOOL_INFO: ToolInfoMap = {
     name: 'Hix Bypass',
     icon: '🔓',
     description: 'Advanced content protection bypass tool for researchers',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: 'https://hixbypass.com/'
   },
   // Default for any tool not specifically defined
@@ -87,7 +87,7 @@ const TOOL_INFO: ToolInfoMap = {
     name: 'Premium Tool',
     icon: '⚡',
     description: 'Access to premium features and capabilities',
-    downloadUrl: 'https://drive.google.com/file/d/17wKpTgwrEXj-UzA3hoNpn5cx0ykJ3oyw/view?usp=drive_link',
+    downloadUrl: 'https://www.mediafire.com/file/hgdwkcrbvedii5r/Rankblaze.in_extension.zip/file',
     toolUrl: '#'
   }
 };
