@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
-import { CHATBOT_CONFIG } from '../config/chatbot.js';
+import { functions } from '../config/firebase';
 
 const ChatBot = ({ isOpen, onToggle }) => {
   const [messages, setMessages] = useState([
