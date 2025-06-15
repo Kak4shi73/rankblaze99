@@ -1,0 +1,196 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             request.auth.token.admin == true;
+    }
+    
+    function isValidUser() {
+      return isAuthenticated() && 
+             request.auth.uid != null && 
+             request.auth.uid.size() > 0;
+    }
+    
+    // Check if request is from Firebase Functions (service account)
+    function isServiceAccount() {
+      return request.auth != null && 
+             request.auth.token.firebase != null &&
+             request.auth.token.firebase.sign_in_provider == 'custom';
+    }
+    
+    function isSystemOrAdmin() {
+      return isAdmin() || isServiceAccount();
+    }
+    
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Admin and system can read/write all users
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Orders collection - users can only access their own orders
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      allow create: if (isAuthenticated() && 
+                       request.auth.uid == resource.data.userId &&
+                       request.resource.data.keys().hasAll(['userId', 'toolId', 'toolName', 'amount', 'paymentStatus']) &&
+                       request.resource.data.paymentStatus == 'pending') ||
+                       isSystemOrAdmin();
+      
+      allow update: if (isAuthenticated() && 
+                       resource.data.userId == request.auth.uid &&
+                       // Only allow updating payment status and related fields
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['paymentStatus', 'merchantTransactionId', 'paymentInitiatedAt', 
+                                  'completedAt', 'failedAt', 'subscriptionId', 'transactionId', 
+                                  'webhookResponse', 'phonePeResponse', 'updatedAt'])) ||
+                       isSystemOrAdmin();
+      
+      // System and admin can do everything
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Subscriptions collection - users can only access their own subscriptions
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      allow create: if (isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.keys().hasAll(['userId', 'toolId', 'toolName', 'isActive']) &&
+                       request.resource.data.isActive == true) ||
+                       isSystemOrAdmin();
+      
+      allow update: if (isAuthenticated() && 
+                       resource.data.userId == request.auth.uid &&
+                       // Users can only deactivate their own subscriptions
+                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['userId', 'toolId', 'orderId', 'transactionId', 'amount']))) ||
+                       isSystemOrAdmin();
+      
+      // System and admin can do everything
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Payments collection - read-only for users, write for system
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      // Only system/admin can create payment records
+      allow create: if isSystemOrAdmin();
+      
+      // System and admin can do everything
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Tool tokens collection - only admin access
+    match /toolTokens/{tokenId} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Analytics and logs - admin only
+    match /analytics/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    match /logs/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // System configuration - admin only
+    match /config/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Webhook logs - system only
+    match /webhooks/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Migration data - system only
+    match /migration/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // User feedback and support - users can create, admin can manage
+    match /feedback/{feedbackId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      allow update, delete: if isSystemOrAdmin();
+    }
+    
+    // Support tickets - users can create and read their own
+    match /support/{ticketId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      allow update: if (isAuthenticated() && 
+                       resource.data.userId == request.auth.uid &&
+                       // Users can only update status and add messages
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'messages', 'updatedAt'])) ||
+                       isSystemOrAdmin();
+      
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Notifications - users can read their own
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && 
+                     (resource.data.userId == request.auth.uid || isSystemOrAdmin());
+      
+      allow update: if (isAuthenticated() && 
+                       resource.data.userId == request.auth.uid &&
+                       // Users can only mark as read
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['read', 'readAt'])) ||
+                       isSystemOrAdmin();
+      
+      allow create, delete: if isSystemOrAdmin();
+    }
+    
+    // Promotional codes and discounts - read for authenticated users, write for admin
+    match /promotions/{promoId} {
+      allow read: if isAuthenticated();
+      allow write: if isSystemOrAdmin();
+    }
+    
+    // Usage statistics - system only
+    match /usage/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Error logs and debugging - system only
+    match /errors/{document=**} {
+      allow read, write: if isSystemOrAdmin();
+    }
+    
+    // Default deny rule for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

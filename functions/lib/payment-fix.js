@@ -119,7 +119,8 @@ exports.bulkFixPayments = functions.https.onCall(async (data, context) => {
                 results.push(Object.assign(Object.assign({}, txn), { result, success: true }));
             }
             catch (error) {
-                results.push(Object.assign(Object.assign({}, txn), { error: error.message, success: false }));
+                console.error(`❌ Error fixing transaction ${txn.merchantTransactionId}:`, error);
+                results.push(Object.assign(Object.assign({}, txn), { error: (error === null || error === void 0 ? void 0 : error.message) || 'Unknown error', success: false }));
             }
         }
         return {

@@ -123,7 +123,7 @@ exports.fixMissingSubscriptions = functions.https.onCall(async (data, context) =
                     fixedCount++;
                 }
                 catch (error) {
-                    results.push({ txnId, error: error.message, success: false });
+                    results.push({ txnId, error: (error === null || error === void 0 ? void 0 : error.message) || 'Unknown error', success: false });
                 }
             }
         }
