@@ -513,7 +513,7 @@ app.post('/initializePhonePePayment', async (req, res) => {
     try {
       // Load the SDK dynamically to avoid import errors
       const sdkModule = require('pg-sdk-node');
-      const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = sdkModule;
+      const { StandardCheckoutClient, Env } = sdkModule;
       
       client = StandardCheckoutClient.getInstance(
         clientId, 
@@ -1107,7 +1107,7 @@ app.get('/verifyPayment', async (req: Request, res: Response) => {
 app.post('/paymentCallback', (req: Request, res: Response) => {
   corsHandler(req, res, async () => {
     try {
-      const { merchantTransactionId, transactionId, amount, responseCode } = req.body;
+      const { merchantTransactionId, transactionId, responseCode } = req.body;
 
       if (!merchantTransactionId || !transactionId || !responseCode) {
         console.error('Missing required parameters in callback:', req.body);
@@ -1280,8 +1280,8 @@ app.post('/webhook/phonepe', async (req, res) => {
   
   try {
     // PhonePe webhook authentication - using the credentials
-    const username = "aryan8009"; // Your PhonePe username
-    const password = "Aryan7071";  // Your PhonePe password
+    // const username = "aryan8009"; // Your PhonePe username (not used)
+    // const password = "Aryan7071";  // Your PhonePe password (not used)
     
     // Extract the authorization header
     const authHeader = req.headers.authorization;
@@ -1301,7 +1301,7 @@ app.post('/webhook/phonepe', async (req, res) => {
     console.log(`📋 Processing webhook event: ${event}`);
     
     // Extract transaction details
-    const { merchantTransactionId, transactionId, amount, responseCode } = data;
+    const { merchantTransactionId, transactionId, responseCode } = data;
     
     if (!merchantTransactionId) {
       console.error("❌ Missing merchantTransactionId in webhook data");
@@ -1490,7 +1490,7 @@ export const api = functions.https.onRequest(app);
 import { 
   initializePhonePePayment, 
   verifyPhonePePayment, 
-  phonePeCallback,
+  // phonePeCallback, // Commented out as not used
   createPhonePeSdkOrder 
 } from './phone-pe-payment';
 

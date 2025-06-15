@@ -57,7 +57,7 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
     }
 
     const merchantTransactionId = `RB_${orderId}_${Date.now()}`;
-    const toolName = getToolName(toolId);
+    // const toolName = getToolName(toolId); // Not used in this function
 
     // PhonePe payment payload
     const paymentPayload = {

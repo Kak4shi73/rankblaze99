@@ -142,8 +142,9 @@ export const bulkFixPayments = functions.https.onCall(
         try {
           const result = await fixPaymentAndGrantTools.run(txn, context);
           results.push({ ...txn, result, success: true });
-        } catch (error) {
-          results.push({ ...txn, error: error.message, success: false });
+        } catch (error: any) {
+          console.error(`❌ Error fixing transaction ${txn.merchantTransactionId}:`, error);
+          results.push({ ...txn, error: error?.message || 'Unknown error', success: false });
         }
       }
       

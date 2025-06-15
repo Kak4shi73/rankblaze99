@@ -1,6 +1,5 @@
 import * as functions from 'firebase-functions';
 import { StandardCheckoutClient, Env, StandardCheckoutPayRequest, CreateSdkOrderRequest } from 'pg-sdk-node';
-import { randomUUID } from 'crypto';
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin if not already initialized

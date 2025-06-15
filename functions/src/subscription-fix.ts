@@ -161,7 +161,7 @@ export const fixMissingSubscriptions = functions.https.onCall(
             fixedCount++;
             
           } catch (error) {
-            results.push({ txnId, error: error.message, success: false });
+            results.push({ txnId, error: (error as any)?.message || 'Unknown error', success: false });
           }
         }
       }
