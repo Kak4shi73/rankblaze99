@@ -7,6 +7,14 @@ import * as express from 'express';
 import { Request, Response } from 'express';
 import fetch from 'node-fetch';
 
+// Import admin setup functions
+import { 
+  setAdminClaims, 
+  initializeAdmin, 
+  checkAdminStatus, 
+  refreshUserToken 
+} from './admin-setup';
+
 // Initialize Firebase admin SDK
 admin.initializeApp();
 
@@ -1499,4 +1507,12 @@ export {
   createSubscriptionAfterPayment, 
   fixMissingSubscriptions, 
   verifyPaymentAndCreateSubscription 
-} from './subscription-fix'; 
+} from './subscription-fix';
+
+// Admin setup and authentication functions
+export { 
+  setAdminClaims, 
+  initializeAdmin, 
+  checkAdminStatus, 
+  refreshUserToken 
+}; 

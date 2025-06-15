@@ -25,6 +25,7 @@ import About from './pages/About';
 import PlaceholderTool from './pages/PlaceholderTool';
 import ThankYou from './pages/ThankYou';
 import PaymentCallbackRedirect from './pages/PaymentCallbackRedirect';
+import AdminSetup from './pages/AdminSetup';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -129,6 +130,7 @@ const App = () => {
                     <Route path="/support" element={<Navigate to="/" replace />} />
                     <Route path="/reviews" element={<Reviews />} />
                     <Route path="/admin/login" element={<AdminLogin />} />
+                    <Route path="/admin/setup" element={<AdminSetup />} />
                     <Route
                       path="/admin"
                       element={
