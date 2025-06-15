@@ -1508,6 +1508,16 @@ import {
   verifyPaymentAndCreateSubscription
 } from './subscription-fix';
 
+// Import Firestore payment functions
+export { 
+  initializePhonePePayment,
+  verifyPhonePePayment,
+  phonePeWebhookFirestore,
+  getUserSubscriptions,
+  checkToolAccess,
+  migrateToFirestore
+} from './firestore-payment';
+
 // Export payment fix functions
 export { fixPaymentAndGrantTools, bulkFixPayments, checkAndFixPayment };
 
