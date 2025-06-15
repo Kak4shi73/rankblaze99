@@ -612,7 +612,7 @@ app.get('/verifyPhonePePayment', async (req, res) => {
                             paymentMethod: 'PhonePe',
                             status: 'completed',
                             merchantTransactionId: merchantOrderId,
-                            transactionId: response.transactionId || 'phonepe_verified',
+                            transactionId: merchantOrderId,
                             source: 'verification',
                             createdAt: admin.firestore.FieldValue.serverTimestamp()
                         });
@@ -1067,176 +1067,154 @@ app.post('/createPhonePeSdkOrder', (req, res) => {
     // Forward the request to the standalone function
     return (0, phone_pe_payment_1.createPhonePeSdkOrder)(req, res);
 });
-// PhonePe Webhook for payment callbacks
-app.post('/webhook/phonepe', async (req, res) => {
-    console.log("🔔 PhonePe webhook received:", req.body);
+// PhonePe Webhook endpoint handler (will be used by Express app)
+async function handlePhonePeWebhookRoute(req, res) {
     try {
-        // PhonePe webhook authentication - using the credentials
-        // const username = "aryan8009"; // Your PhonePe username (not used)
-        // const password = "Aryan7071";  // Your PhonePe password (not used)
-        // Extract the authorization header
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            console.error("❌ Missing authorization header");
-            return res.status(401).send("Unauthorized");
+        const path = req.path;
+        console.log('📞 API Request received:', { path, method: req.method, body: req.body });
+        // Route to PhonePe webhook
+        if (path === '/webhook/phonepe' && req.method === 'POST') {
+            return await handlePhonePeWebhook(req, res);
         }
-        // Parse webhook data
-        const { event, data } = req.body;
-        if (!event || !data) {
-            console.error("❌ Missing event or data in webhook");
-            return res.status(400).send("Bad Request");
+        // Default response for unknown endpoints
+        res.status(404).json({
+            success: false,
+            error: 'Endpoint not found',
+            path: path,
+            availableEndpoints: ['/webhook/phonepe']
+        });
+    }
+    catch (error) {
+        console.error('❌ Error in API handler:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: error.message
+        });
+    }
+}
+// PhonePe Webhook Handler Function
+async function handlePhonePeWebhook(req, res) {
+    try {
+        console.log('📞 PhonePe Webhook received:', req.body);
+        const { response } = req.body;
+        if (!response) {
+            console.error('❌ No response in webhook');
+            res.status(400).send('Invalid webhook data');
+            return;
         }
-        console.log(`📋 Processing webhook event: ${event}`);
-        // Extract transaction details
-        const { merchantTransactionId, transactionId, responseCode } = data;
-        if (!merchantTransactionId) {
-            console.error("❌ Missing merchantTransactionId in webhook data");
-            return res.status(400).send("Bad Request");
-        }
-        console.log(`💳 Processing transaction: ${merchantTransactionId}`);
-        // Determine if payment was successful
-        const isSuccess = responseCode === 'PAYMENT_SUCCESS' || responseCode === 'SUCCESS';
-        const status = isSuccess ? 'completed' : 'failed';
-        console.log(`📊 Payment status: ${status} (responseCode: ${responseCode})`);
-        try {
-            const db = admin.firestore();
-            const rtdb = admin.database();
-            // Get order details from Firestore (primary source)
-            const orderDocRef = db.collection('orders').doc(merchantTransactionId);
-            const orderDoc = await orderDocRef.get();
-            if (!orderDoc.exists) {
-                console.error(`❌ Order not found in Firestore: ${merchantTransactionId}`);
-                return res.status(404).send("Order not found");
+        // Decode the base64 response
+        const decodedResponse = JSON.parse(Buffer.from(response, 'base64').toString());
+        console.log('📋 Decoded response:', decodedResponse);
+        const { merchantTransactionId, transactionId, amount, state } = decodedResponse;
+        if (state === 'COMPLETED') {
+            console.log('✅ Payment completed for:', merchantTransactionId);
+            // Find the order in Firestore
+            const firestore = admin.firestore();
+            const ordersSnapshot = await firestore.collection('orders')
+                .where('merchantTransactionId', '==', merchantTransactionId)
+                .get();
+            if (ordersSnapshot.empty) {
+                console.error('❌ Order not found for merchantTransactionId:', merchantTransactionId);
+                res.status(404).send('Order not found');
+                return;
             }
+            const orderDoc = ordersSnapshot.docs[0];
             const orderData = orderDoc.data();
-            const { userId, toolId, amount: orderAmount } = orderData;
-            console.log(`👤 User: ${userId}, 🔧 Tool: ${toolId}, 💰 Amount: ${orderAmount}`);
-            // 1. Update order status in Firestore (Primary)
-            await orderDocRef.update({
-                status,
-                transactionId,
-                responseCode,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                completedAt: isSuccess ? admin.firestore.FieldValue.serverTimestamp() : null
-            });
-            console.log("✅ Order updated in Firestore");
-            // 2. Create/Update transaction record in Firestore
-            const transactionData = {
+            const { userId, toolId, toolName } = orderData;
+            // Step 4: Activate subscription in Firestore
+            const subscriptionId = `${userId}_${toolId}`;
+            const subscriptionData = {
                 userId,
                 toolId,
-                amount: orderAmount,
-                status,
-                merchantTransactionId,
+                toolName,
+                orderId: orderDoc.id,
                 transactionId,
-                paymentMethod: 'PhonePe',
-                source: 'webhook',
+                merchantTransactionId,
+                amount: amount / 100,
+                isActive: true,
+                subscribedAt: admin.firestore.FieldValue.serverTimestamp(),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             };
-            await db.collection('transactions').doc(merchantTransactionId).set(transactionData, { merge: true });
-            console.log("✅ Transaction record updated in Firestore");
-            // 3. If payment successful, grant tool access and create payment records
-            if (isSuccess) {
-                console.log("🎉 Payment successful! Granting tool access...");
-                try {
-                    // Grant tool access to user (Firestore)
-                    await db.collection('users').doc(userId).collection('tools').doc(toolId).set({
-                        activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        toolId,
-                        source: 'PhonePe_webhook',
-                        transactionId: merchantTransactionId,
-                        amount: orderAmount,
-                        paymentMethod: 'PhonePe'
-                    }, { merge: true });
-                    console.log("✅ Tool access granted in users/{userId}/tools subcollection");
-                    // Update user's tools array for backward compatibility (Firestore)
-                    await db.collection('users').doc(userId).update({
-                        tools: admin.firestore.FieldValue.arrayUnion(toolId),
-                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                        lastPayment: {
-                            toolId,
-                            amount: orderAmount,
-                            transactionId: merchantTransactionId,
-                            date: admin.firestore.FieldValue.serverTimestamp(),
-                            method: 'PhonePe'
-                        }
-                    });
-                    console.log("✅ User tools array updated in Firestore");
-                    // Create payment record in user_payments collection (Firestore)
-                    await db.collection('user_payments').add({
-                        userId,
-                        toolId,
-                        amount: orderAmount,
-                        paymentMethod: 'PhonePe',
-                        status: 'completed',
-                        merchantTransactionId,
-                        transactionId,
-                        source: 'webhook',
-                        createdAt: admin.firestore.FieldValue.serverTimestamp()
-                    });
-                    console.log("✅ Payment record created in user_payments collection");
-                    // 🔥 CRITICAL FIX: Create subscription in Realtime Database
-                    const subscriptionId = `sub_${userId}_${toolId}_${Date.now()}`;
-                    const startDate = Date.now();
-                    const endDate = startDate + (30 * 24 * 60 * 60 * 1000); // 30 days
-                    const subscriptionData = {
-                        userId,
-                        status: 'active',
-                        plan: 'premium',
-                        startDate,
-                        endDate,
-                        tools: [{
-                                id: toolId,
-                                name: getToolName(toolId),
-                                status: 'active'
-                            }],
-                        paymentDetails: {
-                            transactionId: merchantTransactionId,
-                            amount: orderAmount,
-                            method: 'PhonePe',
-                            date: startDate
-                        },
-                        createdAt: startDate,
-                        updatedAt: startDate
-                    };
-                    await rtdb.ref(`subscriptions/${subscriptionId}`).set(subscriptionData);
-                    console.log("✅ Subscription created in Realtime Database - THIS FIXES THE ACCESS ISSUE!");
-                    // Update Realtime DB for quick user data fetch
-                    await rtdb.ref(`users/${userId}/lastPayment`).set({
-                        toolId,
-                        amount: orderAmount,
-                        transactionId: merchantTransactionId,
-                        status: 'completed',
-                        date: Date.now(),
-                        method: 'PhonePe'
-                    });
-                    console.log("✅ User data updated in Realtime Database for quick fetch");
+            // Create subscription
+            await firestore.collection('subscriptions').doc(subscriptionId).set(subscriptionData);
+            console.log('✅ Subscription created in Firestore:', subscriptionId);
+            // Update order status
+            await firestore.collection('orders').doc(orderDoc.id).update({
+                paymentStatus: 'completed',
+                transactionId,
+                completedAt: admin.firestore.FieldValue.serverTimestamp(),
+                subscriptionId,
+                webhookResponse: decodedResponse
+            });
+            console.log('✅ Order updated as completed');
+            // Update user's active subscriptions
+            const userRef = firestore.collection('users').doc(userId);
+            const userDoc = await userRef.get();
+            if (userDoc.exists) {
+                const userData = userDoc.data();
+                const activeSubscriptions = (userData === null || userData === void 0 ? void 0 : userData.activeSubscriptions) || [];
+                if (!activeSubscriptions.includes(toolId)) {
+                    activeSubscriptions.push(toolId);
                 }
-                catch (accessError) {
-                    console.error("❌ Error granting tool access:", accessError);
-                    // Don't fail the webhook response, just log the error
-                }
+                await userRef.update({
+                    activeSubscriptions,
+                    totalSpent: ((userData === null || userData === void 0 ? void 0 : userData.totalSpent) || 0) + (amount / 100),
+                    lastPurchase: {
+                        toolId,
+                        toolName,
+                        amount: amount / 100,
+                        date: admin.firestore.FieldValue.serverTimestamp()
+                    },
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+                console.log('✅ User updated with new subscription');
             }
-            else {
-                // Payment failed - just update Realtime DB status
-                await rtdb.ref(`users/${userId}/lastPayment`).update({
-                    status: 'failed',
-                    updatedAt: Date.now()
+            // Create payment record
+            await firestore.collection('payments').add({
+                userId,
+                toolId,
+                toolName,
+                orderId: orderDoc.id,
+                transactionId,
+                merchantTransactionId,
+                amount: amount / 100,
+                status: 'completed',
+                paymentMethod: 'PhonePe',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                webhookData: decodedResponse
+            });
+            console.log('✅ Payment record created');
+            res.status(200).send('SUCCESS');
+        }
+        else {
+            console.log('❌ Payment failed or pending:', state);
+            // Update order with failed status
+            const firestore = admin.firestore();
+            const ordersSnapshot = await firestore.collection('orders')
+                .where('merchantTransactionId', '==', merchantTransactionId)
+                .get();
+            if (!ordersSnapshot.empty) {
+                const orderDoc = ordersSnapshot.docs[0];
+                await firestore.collection('orders').doc(orderDoc.id).update({
+                    paymentStatus: 'failed',
+                    failedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    webhookResponse: decodedResponse
                 });
             }
-            // Always respond with 200 OK to PhonePe
-            console.log("✅ Webhook processed successfully");
-            return res.status(200).send("OK");
-        }
-        catch (dbError) {
-            console.error("❌ Database error in webhook:", dbError);
-            return res.status(500).send("Database error");
+            res.status(200).send('FAILED');
         }
     }
     catch (error) {
-        console.error("❌ Error processing PhonePe webhook:", error);
-        return res.status(500).send("Internal server error");
+        console.error('❌ Error in PhonePe webhook:', error);
+        res.status(500).send('Internal server error');
     }
+}
+// Add PhonePe webhook route
+app.post('/webhook/phonepe', async (req, res) => {
+    return await handlePhonePeWebhook(req, res);
 });
 // Add a catch-all route at the end to handle 404s
 app.all('*', (req, res) => {
@@ -1247,17 +1225,7 @@ app.all('*', (req, res) => {
 exports.api = functions.https.onRequest(app);
 // Import PhonePe payment functions
 const phone_pe_payment_1 = require("./phone-pe-payment");
-// Import payment fix functions
-const payment_fix_1 = require("./payment-fix");
-Object.defineProperty(exports, "fixPaymentAndGrantTools", { enumerable: true, get: function () { return payment_fix_1.fixPaymentAndGrantTools; } });
-Object.defineProperty(exports, "bulkFixPayments", { enumerable: true, get: function () { return payment_fix_1.bulkFixPayments; } });
-Object.defineProperty(exports, "checkAndFixPayment", { enumerable: true, get: function () { return payment_fix_1.checkAndFixPayment; } });
-// Import subscription fix functions
-const subscription_fix_1 = require("./subscription-fix");
-Object.defineProperty(exports, "createSubscriptionAfterPayment", { enumerable: true, get: function () { return subscription_fix_1.createSubscriptionAfterPayment; } });
-Object.defineProperty(exports, "fixMissingSubscriptions", { enumerable: true, get: function () { return subscription_fix_1.fixMissingSubscriptions; } });
-Object.defineProperty(exports, "verifyPaymentAndCreateSubscription", { enumerable: true, get: function () { return subscription_fix_1.verifyPaymentAndCreateSubscription; } });
-// Import Firestore payment functions
+// Essential exports for the new Firestore system
 var firestore_payment_1 = require("./firestore-payment");
 Object.defineProperty(exports, "initializePhonePePayment", { enumerable: true, get: function () { return firestore_payment_1.initializePhonePePayment; } });
 Object.defineProperty(exports, "verifyPhonePePayment", { enumerable: true, get: function () { return firestore_payment_1.verifyPhonePePayment; } });
@@ -1265,4 +1233,13 @@ Object.defineProperty(exports, "phonePeWebhookFirestore", { enumerable: true, ge
 Object.defineProperty(exports, "getUserSubscriptions", { enumerable: true, get: function () { return firestore_payment_1.getUserSubscriptions; } });
 Object.defineProperty(exports, "checkToolAccess", { enumerable: true, get: function () { return firestore_payment_1.checkToolAccess; } });
 Object.defineProperty(exports, "migrateToFirestore", { enumerable: true, get: function () { return firestore_payment_1.migrateToFirestore; } });
+// Migration and fix functions (for maintenance)
+var payment_fix_1 = require("./payment-fix");
+Object.defineProperty(exports, "fixPaymentAndGrantTools", { enumerable: true, get: function () { return payment_fix_1.fixPaymentAndGrantTools; } });
+Object.defineProperty(exports, "bulkFixPayments", { enumerable: true, get: function () { return payment_fix_1.bulkFixPayments; } });
+Object.defineProperty(exports, "checkAndFixPayment", { enumerable: true, get: function () { return payment_fix_1.checkAndFixPayment; } });
+var subscription_fix_1 = require("./subscription-fix");
+Object.defineProperty(exports, "createSubscriptionAfterPayment", { enumerable: true, get: function () { return subscription_fix_1.createSubscriptionAfterPayment; } });
+Object.defineProperty(exports, "fixMissingSubscriptions", { enumerable: true, get: function () { return subscription_fix_1.fixMissingSubscriptions; } });
+Object.defineProperty(exports, "verifyPaymentAndCreateSubscription", { enumerable: true, get: function () { return subscription_fix_1.verifyPaymentAndCreateSubscription; } });
 //# sourceMappingURL=index.js.map

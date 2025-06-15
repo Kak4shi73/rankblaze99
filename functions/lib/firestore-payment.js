@@ -59,7 +59,7 @@ exports.initializePhonePePayment = functions.https.onRequest(async (req, res) =>
             amount: amount * 100,
             redirectUrl: `https://rankblaze99.web.app/tool/${toolId}?txnId=${merchantTransactionId}`,
             redirectMode: 'POST',
-            callbackUrl: `https://us-central1-rankblaze-138f7.cloudfunctions.net/phonePeWebhookFirestore`,
+            callbackUrl: `https://us-central1-rankblaze-138f7.cloudfunctions.net/api/webhook/phonepe`,
             mobileNumber: '9999999999',
             paymentInstrument: {
                 type: 'PAY_PAGE'

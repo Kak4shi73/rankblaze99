@@ -360,9 +360,27 @@ const ToolAccess: React.FC = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const txnId = urlParams.get('txnId');
+    const merchantTransactionId = urlParams.get('merchantTransactionId');
+    const transactionId = urlParams.get('transactionId');
     
-    if (txnId && user) {
-      handlePaymentVerification(txnId);
+    // Try different parameter names that PhonePe might use
+    const paymentId = txnId || merchantTransactionId || transactionId;
+    
+    console.log('🔍 Checking URL parameters:', {
+      txnId,
+      merchantTransactionId,
+      transactionId,
+      paymentId,
+      fullURL: location.href,
+      search: location.search
+    });
+    
+    if (paymentId && user) {
+      console.log('✅ Found payment ID, starting verification:', paymentId);
+      handlePaymentVerification(paymentId);
+    } else if (location.search && user) {
+      console.log('⚠️ URL has parameters but no payment ID found');
+      setError('Payment verification failed: No transaction ID found in URL. Please contact support if you completed a payment.');
     }
   }, [location.search, user]);
 
@@ -624,7 +642,26 @@ const ToolAccess: React.FC = () => {
           {/* Error Message */}
           {error && (
             <div className="bg-red-500 text-white p-4 rounded-lg mb-6">
-              <p>{error}</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">⚠️ {error}</p>
+                  {error.includes('No transaction ID') && (
+                    <p className="text-sm mt-2 opacity-90">
+                      If you just completed a payment, please wait a moment and try refreshing the page. 
+                      The payment system may take a few seconds to process.
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setError('');
+                    checkUserAccess();
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm ml-4"
+                >
+                  Retry
+                </button>
+              </div>
             </div>
           )}
 
@@ -677,7 +714,25 @@ const ToolAccess: React.FC = () => {
             <div className="mt-6 text-sm text-gray-400">
               <p>💳 Secure payment via PhonePe</p>
               <p>📞 24/7 support available</p>
+              <p>🔄 Instant activation after payment</p>
             </div>
+
+            {/* Debug info for development */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-6 p-4 bg-gray-700 rounded-lg text-left">
+                <h4 className="text-white font-medium mb-2">Debug Info:</h4>
+                <pre className="text-xs text-gray-300 overflow-auto">
+                  {JSON.stringify({
+                    userId: user?.uid,
+                    toolId,
+                    hasAccess,
+                    error,
+                    urlParams: location.search,
+                    userSubscriptions: userSubscriptions.length
+                  }, null, 2)}
+                </pre>
+              </div>
+            )}
           </div>
         </div>
       </div>
