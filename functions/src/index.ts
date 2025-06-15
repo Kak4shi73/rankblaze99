@@ -1450,4 +1450,22 @@ import {
   createPhonePeSdkOrder 
 } from './phone-pe-payment';
 
-// No need to re-export these functions as they're already integrated in the Express app above 
+// Import payment fix functions
+import {
+  fixPaymentAndGrantTools,
+  bulkFixPayments,
+  checkAndFixPayment
+} from './payment-fix';
+
+// Import subscription fix functions
+import {
+  createSubscriptionAfterPayment,
+  fixMissingSubscriptions,
+  verifyPaymentAndCreateSubscription
+} from './subscription-fix';
+
+// Export payment fix functions
+export { fixPaymentAndGrantTools, bulkFixPayments, checkAndFixPayment };
+
+// Export subscription fix functions
+export { createSubscriptionAfterPayment, fixMissingSubscriptions, verifyPaymentAndCreateSubscription }; 
