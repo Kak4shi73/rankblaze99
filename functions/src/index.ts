@@ -456,7 +456,7 @@ app.post('/initializePhonePePayment', async (req, res) => {
     
     // Generate a unique merchant order ID
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
     
     console.log("🔄 Creating order in database before payment initialization...");
     
@@ -839,7 +839,7 @@ app.post('/createPhonePeSdkOrder', async (req, res) => {
     const isProduction = process.env.NODE_ENV === 'production';
     
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-    const redirectUrl = "https://www.rankblaze.in/payment-callback";
+    const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
     
     try {
       // Load the SDK dynamically

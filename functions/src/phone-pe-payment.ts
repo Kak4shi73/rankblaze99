@@ -52,7 +52,7 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
     
     // Build the redirect URL to include the transaction ID as a query parameter
-    const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+    const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
     
     console.log(`Initializing payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
     console.log(`Using redirectUrl: ${redirectUrl}`);
@@ -489,7 +489,7 @@ export const createPhonePeSdkOrder = functions.https.onRequest(async (req, res) 
     const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
     
     // Build the redirect URL to include the transaction ID as a query parameter
-    const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+    const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
     
     console.log(`Initializing SDK payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
     console.log(`Using redirectUrl: ${redirectUrl}`);

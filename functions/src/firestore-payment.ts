@@ -65,8 +65,8 @@ export const initializePhonePePayment = functions.https.onRequest(async (req, re
       merchantTransactionId,
       merchantUserId: userId,
       amount: amount * 100, // Convert to paise
-      redirectUrl: `https://rankblaze99.web.app/tool/${toolId}?txnId=${merchantTransactionId}`,
-      redirectMode: 'POST',
+      redirectUrl: `https://www.rankblaze.in/payment-success?txnId=${merchantTransactionId}`,
+      redirectMode: 'GET',
       callbackUrl: `https://us-central1-rankblaze-138f7.cloudfunctions.net/api/webhook/phonepe`,
       mobileNumber: '9999999999',
       paymentInstrument: {
