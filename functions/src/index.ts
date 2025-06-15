@@ -894,6 +894,21 @@ const generateChecksum = (payload: string, saltKey: string): string => {
   return crypto.SHA256(string).toString(crypto.enc.Base64);
 };
 
+// Helper function to get tool name
+const getToolName = (toolId: string): string => {
+  const toolNames: { [key: string]: string } = {
+    'chatgpt_plus': 'ChatGPT Plus',
+    'envato_elements': 'Envato Elements',
+    'canva_pro': 'Canva Pro',
+    'storyblocks': 'Storyblocks',
+    'semrush': 'SEMrush',
+    'stealth_writer': 'Stealth Writer',
+    'hix_bypass': 'Hix Bypass'
+  };
+  
+  return toolNames[toolId] || toolId;
+};
+
 // Initialize payment with explicit CORS headers
 app.post('/initializePayment', async (req: Request, res: Response) => {
   console.log('==== PAYMENT INITIALIZATION STARTED ====');
@@ -1347,64 +1362,93 @@ app.post('/webhook/phonepe', async (req, res) => {
       await db.collection('transactions').doc(merchantTransactionId).set(transactionData, { merge: true });
       console.log("✅ Transaction record updated in Firestore");
       
-      // 3. If payment successful, grant tool access and create payment records
-      if (isSuccess) {
-        console.log("🎉 Payment successful! Granting tool access...");
-        
-        try {
-          // Grant tool access to user (Firestore)
-          await db.collection('users').doc(userId).collection('tools').doc(toolId).set({
-            activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            toolId,
-            source: 'PhonePe_webhook',
-            transactionId: merchantTransactionId,
-            amount: orderAmount,
-            paymentMethod: 'PhonePe'
-          }, { merge: true });
+              // 3. If payment successful, grant tool access and create payment records
+        if (isSuccess) {
+          console.log("🎉 Payment successful! Granting tool access...");
           
-          console.log("✅ Tool access granted in users/{userId}/tools subcollection");
-          
-          // Update user's tools array for backward compatibility (Firestore)
-          await db.collection('users').doc(userId).update({
-            tools: admin.firestore.FieldValue.arrayUnion(toolId),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastPayment: {
+          try {
+            // Grant tool access to user (Firestore)
+            await db.collection('users').doc(userId).collection('tools').doc(toolId).set({
+              activatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              toolId,
+              source: 'PhonePe_webhook',
+              transactionId: merchantTransactionId,
+              amount: orderAmount,
+              paymentMethod: 'PhonePe'
+            }, { merge: true });
+            
+            console.log("✅ Tool access granted in users/{userId}/tools subcollection");
+            
+            // Update user's tools array for backward compatibility (Firestore)
+            await db.collection('users').doc(userId).update({
+              tools: admin.firestore.FieldValue.arrayUnion(toolId),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+              lastPayment: {
+                toolId,
+                amount: orderAmount,
+                transactionId: merchantTransactionId,
+                date: admin.firestore.FieldValue.serverTimestamp(),
+                method: 'PhonePe'
+              }
+            });
+            
+            console.log("✅ User tools array updated in Firestore");
+            
+            // Create payment record in user_payments collection (Firestore)
+            await db.collection('user_payments').add({
+              userId,
+              toolId,
+              amount: orderAmount,
+              paymentMethod: 'PhonePe',
+              status: 'completed',
+              merchantTransactionId,
+              transactionId,
+              source: 'webhook',
+              createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log("✅ Payment record created in user_payments collection");
+            
+            // 🔥 CRITICAL FIX: Create subscription in Realtime Database
+            const subscriptionId = `sub_${userId}_${toolId}_${Date.now()}`;
+            const startDate = Date.now();
+            const endDate = startDate + (30 * 24 * 60 * 60 * 1000); // 30 days
+            
+            const subscriptionData = {
+              userId,
+              status: 'active',
+              plan: 'premium',
+              startDate,
+              endDate,
+              tools: [{
+                id: toolId,
+                name: getToolName(toolId),
+                status: 'active'
+              }],
+              paymentDetails: {
+                transactionId: merchantTransactionId,
+                amount: orderAmount,
+                method: 'PhonePe',
+                date: startDate
+              },
+              createdAt: startDate,
+              updatedAt: startDate
+            };
+            
+            await rtdb.ref(`subscriptions/${subscriptionId}`).set(subscriptionData);
+            console.log("✅ Subscription created in Realtime Database - THIS FIXES THE ACCESS ISSUE!");
+            
+            // Update Realtime DB for quick user data fetch
+            await rtdb.ref(`users/${userId}/lastPayment`).set({
               toolId,
               amount: orderAmount,
               transactionId: merchantTransactionId,
-              date: admin.firestore.FieldValue.serverTimestamp(),
+              status: 'completed',
+              date: Date.now(),
               method: 'PhonePe'
-            }
-          });
-          
-          console.log("✅ User tools array updated in Firestore");
-          
-          // Create payment record in user_payments collection (Firestore)
-          await db.collection('user_payments').add({
-            userId,
-            toolId,
-            amount: orderAmount,
-            paymentMethod: 'PhonePe',
-            status: 'completed',
-            merchantTransactionId,
-            transactionId,
-            source: 'webhook',
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
-          });
-          
-          console.log("✅ Payment record created in user_payments collection");
-          
-          // Update Realtime DB for quick user data fetch
-          await rtdb.ref(`users/${userId}/lastPayment`).set({
-            toolId,
-            amount: orderAmount,
-            transactionId: merchantTransactionId,
-            status: 'completed',
-            date: Date.now(),
-            method: 'PhonePe'
-          });
-          
-          console.log("✅ User data updated in Realtime Database for quick fetch");
+            });
+            
+            console.log("✅ User data updated in Realtime Database for quick fetch");
           
         } catch (accessError) {
           console.error("❌ Error granting tool access:", accessError);
