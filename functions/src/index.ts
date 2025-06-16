@@ -1345,12 +1345,80 @@ async function handlePhonePeWebhook(req: any, res: any) {
       const userId = merchantParts[0];
       const toolId = merchantParts[1];
 
-      // Create subscription in Realtime Database (original method)
+      // Create subscription in Realtime Database (new structure to match admin panel)
       const database = admin.database();
       const toolName = getToolName(toolId);
-      const subscriptionRef = database.ref(`subscriptions/${userId}/${toolId}`);
       
-      const subscriptionData = {
+      // Check if user already has an active subscription
+      const subscriptionsRef = database.ref('subscriptions');
+      const subscriptionsSnapshot = await subscriptionsRef.once('value');
+      const allSubscriptions = subscriptionsSnapshot.val() || {};
+      
+      // Find user's existing active subscription
+      let userSubscription = null;
+      let userSubscriptionId = null;
+      
+      for (const [subId, sub] of Object.entries(allSubscriptions)) {
+        const subscription = sub as any;
+        if (subscription.userId === userId && subscription.status === 'active') {
+          userSubscription = subscription;
+          userSubscriptionId = subId;
+          break;
+        }
+      }
+      
+      if (userSubscription && userSubscriptionId) {
+        // Add tool to existing subscription
+        const currentTools = userSubscription.tools || [];
+        const toolExists = currentTools.some((tool: any) => 
+          typeof tool === 'object' ? tool.id === toolId : tool === toolId
+        );
+        
+        if (!toolExists) {
+          // Convert all tools to objects if they aren't already
+          const updatedTools = currentTools.map((t: any) => 
+            typeof t === 'object' ? t : { id: t, status: 'active' }
+          );
+          
+          // Add the new tool
+          updatedTools.push({ id: toolId, status: 'active' });
+          
+          const subRef = database.ref(`subscriptions/${userSubscriptionId}`);
+          await subRef.update({
+            tools: updatedTools,
+            updatedAt: new Date().toISOString()
+          });
+          
+          console.log(`✅ Tool ${toolId} added to existing subscription ${userSubscriptionId}`);
+        } else {
+          console.log(`ℹ️ User already has ${toolId} in subscription ${userSubscriptionId}`);
+        }
+      } else {
+        // Create new subscription with this tool
+        const subId = `sub_${Date.now()}`;
+        const subRef = database.ref(`subscriptions/${subId}`);
+        
+        const subscriptionData = {
+          userId,
+          status: 'active',
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+          amount: amount / 100,
+          paymentId: merchantTransactionId,
+          tools: [{ id: toolId, status: 'active' }],
+          createdAt: new Date().toISOString(),
+          paymentMethod: 'PhonePe',
+          transactionId,
+          merchantTransactionId
+        };
+
+        await subRef.set(subscriptionData);
+        console.log(`✅ New subscription created: ${subId}`);
+      }
+      
+      // Also create in old structure for backward compatibility
+      const oldSubscriptionRef = database.ref(`subscriptions/${userId}/${toolId}`);
+      const oldSubscriptionData = {
         toolId,
         toolName,
         isActive: true,
@@ -1361,9 +1429,8 @@ async function handlePhonePeWebhook(req: any, res: any) {
         merchantTransactionId,
         amount: amount / 100
       };
-
-      await subscriptionRef.set(subscriptionData);
-      console.log('✅ Subscription created in Realtime Database');
+      await oldSubscriptionRef.set(oldSubscriptionData);
+      console.log('✅ Subscription also created in old structure for compatibility');
 
       // Also create payment record in Realtime Database
       const paymentRef = database.ref('payments').push();

@@ -325,21 +325,68 @@ const ToolAccess: React.FC = () => {
       setIsLoading(true);
       console.log(`🔍 Checking access for user ${user!.uid} and tool ${toolId}`);
       
-      // Check subscriptions in Realtime Database
-      const subscriptionsRef = ref(db, `subscriptions/${user!.uid}`);
+      // Check subscriptions in Realtime Database - correct structure
+      const subscriptionsRef = ref(db, 'subscriptions');
       const subscriptionsSnapshot = await get(subscriptionsRef);
       
       if (subscriptionsSnapshot.exists()) {
-        const subscriptionsData = subscriptionsSnapshot.val();
-        console.log('Found subscriptions in Realtime DB:', subscriptionsData);
+        const allSubscriptions = subscriptionsSnapshot.val();
+        console.log('Found subscriptions in Realtime DB:', allSubscriptions);
+        
+        // Find user's active subscription
+        const userSubscription = Object.values(allSubscriptions).find((sub: any) => 
+          sub.userId === user!.uid && sub.status === 'active'
+        ) as any;
+        
+        if (userSubscription && userSubscription.tools) {
+          console.log('Found user subscription:', userSubscription);
+          
+          // Check if the current tool is in the tools array
+          const toolAccess = userSubscription.tools.find((tool: any) => {
+            if (typeof tool === 'object') {
+              return tool.id === toolId && tool.status === 'active';
+            }
+            return tool === toolId;
+          });
+          
+          if (toolAccess) {
+            console.log('✅ Active tool access found in subscription:', toolAccess);
+            
+            const accessData: Access = {
+              id: `${user!.uid}_${toolId}`,
+              userId: user!.uid,
+              toolId: toolId!,
+              toolName: getToolName(toolId!),
+              isActive: true,
+              startDate: new Date(userSubscription.startDate).getTime(),
+              endDate: new Date(userSubscription.endDate).getTime(),
+              subscribedAt: { seconds: Math.floor(new Date(userSubscription.startDate).getTime() / 1000) },
+              expiresAt: new Date(userSubscription.endDate),
+              paymentMethod: 'admin_activation'
+            };
+            
+            setHasAccess(true);
+            setAccess(accessData);
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // Fallback: Check subscriptions using old structure (userId path)
+      const userSubscriptionsRef = ref(db, `subscriptions/${user!.uid}`);
+      const userSubscriptionsSnapshot = await get(userSubscriptionsRef);
+      
+      if (userSubscriptionsSnapshot.exists()) {
+        const subscriptionsData = userSubscriptionsSnapshot.val();
+        console.log('Found user subscriptions (old structure):', subscriptionsData);
         
         // Check if current tool is in subscriptions
         const toolSubscription = subscriptionsData[toolId!];
         
         if (toolSubscription && toolSubscription.isActive) {
-          console.log('✅ Active subscription found in Realtime DB for tool:', toolId);
+          console.log('✅ Active subscription found in old structure for tool:', toolId);
           
-          // Convert Realtime DB format to expected format
           const accessData: Access = {
             id: `${user!.uid}_${toolId}`,
             userId: user!.uid,
@@ -380,7 +427,7 @@ const ToolAccess: React.FC = () => {
             startDate: toolData.startDate || Date.now(),
             endDate: toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000,
             subscribedAt: { seconds: Math.floor((toolData.startDate || Date.now()) / 1000) },
-            expiresAt: new Date(toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
+            expiresAt: new Date(toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
             paymentMethod: 'admin_activation'
           };
           
