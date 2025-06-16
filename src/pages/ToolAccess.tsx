@@ -647,41 +647,88 @@ const ToolAccess: React.FC = () => {
 // Helper functions
 const getToolName = (toolId: string): string => {
   const toolNames: { [key: string]: string } = {
+    // Handle different formats
     'chatgpt-plus': 'ChatGPT Plus',
+    'chatgpt_plus': 'ChatGPT Plus',
+    'chatgpt': 'ChatGPT Plus',
+    'tool_1': 'ChatGPT Plus',
+    '1': 'ChatGPT Plus',
+    
     'envato-elements': 'Envato Elements',
+    'envato_elements': 'Envato Elements', 
+    'envato': 'Envato Elements',
+    'tool_2': 'Envato Elements',
+    '2': 'Envato Elements',
+    
     'canva-pro': 'Canva Pro',
+    'canva_pro': 'Canva Pro',
+    'canva': 'Canva Pro',
+    'tool_3': 'Canva Pro',
+    '3': 'Canva Pro',
+    
     'storyblocks': 'Storyblocks',
+    'tool_4': 'Storyblocks', 
+    '4': 'Storyblocks',
+    
     'semrush': 'SEMrush',
+    'tool_5': 'SEMrush',
+    '5': 'SEMrush',
+    
     'stealth-writer': 'Stealth Writer',
-    'hix-bypass': 'Hix Bypass'
+    'stealth_writer': 'Stealth Writer',
+    'tool_19': 'Stealth Writer',
+    '19': 'Stealth Writer',
+    
+    'hix-bypass': 'Hix Bypass',
+    'hix_bypass': 'Hix Bypass',
+    'tool_20': 'Hix Bypass',
+    '20': 'Hix Bypass'
   };
   return toolNames[toolId] || 'Premium Tool';
 };
 
 const getToolPrice = (toolId: string): number => {
-  const toolPrices: { [key: string]: number } = {
-    'chatgpt-plus': 199,
-    'envato-elements': 299,
-    'canva-pro': 249,
-    'storyblocks': 399,
-    'semrush': 499,
-    'stealth-writer': 199,
-    'hix-bypass': 149
-  };
-  return toolPrices[toolId] || 199;
+  // Normalize tool ID to check multiple formats
+  const normalizedId = toolId.toLowerCase();
+  
+  if (normalizedId.includes('chatgpt') || normalizedId.includes('tool_1') || normalizedId === '1') {
+    return 199;
+  } else if (normalizedId.includes('envato') || normalizedId.includes('tool_2') || normalizedId === '2') {
+    return 299;
+  } else if (normalizedId.includes('canva') || normalizedId.includes('tool_3') || normalizedId === '3') {
+    return 249;
+  } else if (normalizedId.includes('story') || normalizedId.includes('tool_4') || normalizedId === '4') {
+    return 399;
+  } else if (normalizedId.includes('semrush') || normalizedId.includes('tool_5') || normalizedId === '5') {
+    return 499;
+  } else if (normalizedId.includes('stealth') || normalizedId.includes('tool_19') || normalizedId === '19') {
+    return 199;
+  } else if (normalizedId.includes('hix') || normalizedId.includes('bypass') || normalizedId.includes('tool_20') || normalizedId === '20') {
+    return 149;
+  }
+  return 199; // Default price
 };
 
 const getToolDescription = (toolId: string): string => {
-  const descriptions: { [key: string]: string } = {
-    'chatgpt-plus': 'Access to ChatGPT Plus with GPT-4 and advanced features',
-    'envato-elements': 'Unlimited downloads from Envato Elements library',
-    'canva-pro': 'Professional design tools and premium templates',
-    'storyblocks': 'Unlimited stock videos, audio, and images',
-    'semrush': 'Complete SEO and digital marketing toolkit',
-    'stealth-writer': 'AI content writer that bypasses detection',
-    'hix-bypass': 'Bypass AI detection for your content'
-  };
-  return descriptions[toolId] || 'Premium tool access';
+  // Normalize tool ID to check multiple formats
+  const normalizedId = toolId.toLowerCase();
+  
+  if (normalizedId.includes('chatgpt') || normalizedId.includes('tool_1') || normalizedId === '1') {
+    return 'Access to ChatGPT Plus with GPT-4 and advanced features';
+  } else if (normalizedId.includes('envato') || normalizedId.includes('tool_2') || normalizedId === '2') {
+    return 'Unlimited downloads from Envato Elements library';
+  } else if (normalizedId.includes('canva') || normalizedId.includes('tool_3') || normalizedId === '3') {
+    return 'Professional design tools and premium templates';
+  } else if (normalizedId.includes('story') || normalizedId.includes('tool_4') || normalizedId === '4') {
+    return 'Unlimited stock videos, audio, and images';
+  } else if (normalizedId.includes('semrush') || normalizedId.includes('tool_5') || normalizedId === '5') {
+    return 'Complete SEO and digital marketing toolkit';
+  } else if (normalizedId.includes('stealth') || normalizedId.includes('tool_19') || normalizedId === '19') {
+    return 'AI content writer that bypasses detection';
+  } else if (normalizedId.includes('hix') || normalizedId.includes('bypass') || normalizedId.includes('tool_20') || normalizedId === '20') {
+    return 'Bypass AI detection for your content';
+  }
+  return 'Premium tool access'; // Default description
 };
 
 export default ToolAccess;
