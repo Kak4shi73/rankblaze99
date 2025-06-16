@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Menu, X, Settings, Key, Plug, Cookie, ChevronRight, Coins } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
-import { ref, update, get } from 'firebase/database';
-import { db, firestore } from '../../config/firebase';
+import { ref, update, get, set } from 'firebase/database';
+import { db } from '../../config/firebase';
 import { useToast } from '../../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -42,9 +41,9 @@ const AdminHamburgerMenu = ({ adminId }: AdminHamburgerMenuProps) => {
     if (!newPassword) return;
 
     try {
-      // Create a special document in Firestore for password change request
-      const passwordChangeRequest = doc(firestore, 'adminPasswordChangeRequests', adminId);
-      await setDoc(passwordChangeRequest, {
+      // Create a special document in Realtime Database for password change request
+      const passwordChangeRequest = ref(db, `adminPasswordChangeRequests/${adminId}`);
+      await set(passwordChangeRequest, {
         userId: adminId,
         newPassword: newPassword,
         requestedAt: new Date().toISOString(),

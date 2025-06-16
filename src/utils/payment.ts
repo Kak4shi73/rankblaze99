@@ -1,6 +1,5 @@
-import { db, firestore } from '../config/firebase';
-import { ref, get, set } from 'firebase/database';
-import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp, updateDoc, arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { ref, get, set, push, update } from 'firebase/database';
 
 // API base URL for backend functions
 const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net/api';
@@ -308,10 +307,10 @@ export const processSuccessfulPayment = async (
 ): Promise<boolean> => {
   try {
     // Update the user's profile with the purchased tools
-    const userRef = doc(firestore, 'users', userId);
+    const userRef = ref(db, `users/${userId}/tools`);
     
     // Get the user document to check if it exists
-    const userDoc = await getDoc(userRef);
+    const userDoc = await get(userRef);
     
     if (!userDoc.exists()) {
       console.error('User document not found when processing payment');
@@ -319,44 +318,33 @@ export const processSuccessfulPayment = async (
     }
     
     // Add each tool to the user's tools array and set access status as "active"
-    await updateDoc(userRef, {
-      tools: firestoreArrayUnion(...toolIds),
-      updatedAt: serverTimestamp(),
-    });
-    
-    // Create or update tool access records for each tool
     for (const toolId of toolIds) {
-      // Create a unique access record ID
-      const accessId = `${userId}_${toolId}`;
-      
-      const toolAccessRef = doc(firestore, 'tool_access', accessId);
-      await setDoc(toolAccessRef, {
-        userId,
-        toolId,
+      await push(userRef, {
+        id: toolId,
         status: 'active',
-        activatedAt: serverTimestamp(),
+        activatedAt: new Date().toISOString(),
         paymentId: merchantTransactionId
-      }, { merge: true });
+      });
     }
     
     // Create a payment record
-    const paymentRef = doc(firestore, 'user_payments', `${userId}_${merchantTransactionId}`);
-    await setDoc(paymentRef, {
+    const paymentRef = ref(db, `user_payments/${userId}/${merchantTransactionId}`);
+    await set(paymentRef, {
       userId,
       toolIds,
       merchantTransactionId,
       status: 'completed',
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
     });
     
     // Also save a reference in the user_purchases collection
-    const purchaseRef = doc(firestore, 'user_purchases', merchantTransactionId);
-    await setDoc(purchaseRef, {
+    const purchaseRef = ref(db, `user_purchases/${merchantTransactionId}`);
+    await set(purchaseRef, {
       userId,
       orderId: merchantTransactionId,
-      purchasedAt: serverTimestamp(),
+      purchasedAt: new Date().toISOString(),
       tools: toolIds.map(id => ({ id }))
-    }, { merge: true });
+    });
     
     return true;
   } catch (error) {
@@ -416,39 +404,17 @@ export const autoVerifyAndProcessPayment = async (
             updatedAt: new Date().toISOString()
           };
           
-          // Store in Firestore
-          try {
-            const txnRef = doc(firestore, 'transactions', merchantTransactionId);
-            await setDoc(txnRef, transactionData, { merge: true });
-            console.log('Transaction record created/updated in Firestore');
-          } catch (firestoreError) {
-            console.error('Error storing transaction in Firestore:', firestoreError);
-            // Continue anyway since this is just record keeping
-          }
-          
           // Store in Realtime Database as backup
-          try {
-            const rtdbRef = ref(db, `transactions/${merchantTransactionId}`);
-            await set(rtdbRef, transactionData);
-            console.log('Transaction record created/updated in Realtime Database');
-          } catch (rtdbError) {
-            console.error('Error storing transaction in Realtime Database:', rtdbError);
-            // Continue anyway since this is just record keeping
-          }
+          const rtdbRef = ref(db, `transactions/${merchantTransactionId}`);
+          await set(rtdbRef, transactionData);
+          console.log('Transaction record created/updated in Realtime Database');
           
           // Grant tool access to user
-          const userToolRef = doc(firestore, 'users', finalUserId, 'tools', extractedToolId);
-          await setDoc(userToolRef, {
+          const userToolRef = ref(db, `users/${finalUserId}/tools/${extractedToolId}`);
+          await set(userToolRef, {
             activatedAt: new Date().toISOString(),
             toolId: extractedToolId,
             source: 'auto_verification'
-          });
-          
-          // Update user's tools array for backward compatibility
-          const userRef = doc(firestore, 'users', finalUserId);
-          await updateDoc(userRef, {
-            tools: firestoreArrayUnion(extractedToolId),
-            updatedAt: new Date().toISOString()
           });
           
           console.log('Tool access granted successfully');

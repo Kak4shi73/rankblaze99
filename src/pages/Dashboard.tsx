@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Settings, CreditCard, Package, User, Mail, LogOut, MessageCircle, ExternalLink } from 'lucide-react';
-import { firestore, collections, db } from '../config/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { ref, onValue } from 'firebase/database';
 import { getAuth, signOut } from 'firebase/auth';
 
@@ -70,7 +69,7 @@ const Dashboard = () => {
 
     // Listen for accesses from realtime database
     const accessesRef = ref(db, 'subscriptions');
-    const unsubscribeAccesses = onValue(accessesRef, (snapshot) => {
+    const unsubscribeAccesses = get(accessesRef).then((snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         
@@ -94,7 +93,7 @@ const Dashboard = () => {
 
     // Listen for payment data
     const paymentsRef = ref(db, 'payments');
-    const unsubscribePayments = onValue(paymentsRef, (snapshot) => {
+    const unsubscribePayments = get(paymentsRef).then((snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
         const userPayments = Object.entries(data)
