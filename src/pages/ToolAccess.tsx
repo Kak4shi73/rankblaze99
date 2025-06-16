@@ -24,10 +24,16 @@ interface ToolInfoMap {
 interface Access {
   id: string;
   userId: string;
-  startDate: number;
-  endDate: number;
-  status: string;
-  tools: Array<{ id: string; name: string; }>;
+  toolId: string;
+  toolName: string;
+  isActive: boolean;
+  startDate?: number;
+  endDate?: number;
+  subscribedAt?: { seconds: number } | number;
+  expiresAt?: Date | number;
+  paymentMethod?: string;
+  status?: string;
+  tools?: Array<{ id: string; name: string; }>;
 }
 
 // Define tool information for rendering
@@ -308,14 +314,16 @@ const ToolAccess: React.FC = () => {
           console.log('✅ Active subscription found in Realtime DB for tool:', toolId);
           
           // Convert Realtime DB format to expected format
-          const accessData = {
+          const accessData: Access = {
             id: `${user!.uid}_${toolId}`,
             userId: user!.uid,
             toolId: toolId!,
             toolName: toolSubscription.toolName || getToolName(toolId!),
             isActive: true,
-            subscribedAt: { seconds: Math.floor(toolSubscription.startDate / 1000) },
-            expiresAt: new Date(toolSubscription.endDate),
+            startDate: toolSubscription.startDate,
+            endDate: toolSubscription.endDate,
+            subscribedAt: toolSubscription.startDate ? { seconds: Math.floor(toolSubscription.startDate / 1000) } : { seconds: Math.floor(Date.now() / 1000) },
+            expiresAt: new Date(toolSubscription.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
             paymentMethod: toolSubscription.paymentMethod || 'admin_activation'
           };
           
@@ -337,12 +345,14 @@ const ToolAccess: React.FC = () => {
         if (toolData.isActive || toolData.status === 'active') {
           console.log('✅ Active tool found in Realtime DB users/tools');
           
-          const accessData = {
+          const accessData: Access = {
             id: `${user!.uid}_${toolId}`,
             userId: user!.uid,
             toolId: toolId!,
             toolName: toolData.toolName || getToolName(toolId!),
             isActive: true,
+            startDate: toolData.startDate || Date.now(),
+            endDate: toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000,
             subscribedAt: { seconds: Math.floor((toolData.startDate || Date.now()) / 1000) },
             expiresAt: new Date(toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
             paymentMethod: 'admin_activation'
@@ -483,13 +493,19 @@ const ToolAccess: React.FC = () => {
                 <div>
                   <p className="text-gray-400">Subscribed On</p>
                   <p className="text-white font-medium">
-                    {new Date(access.subscribedAt.seconds * 1000).toLocaleDateString()}
+                    {access.subscribedAt && typeof access.subscribedAt === 'object' && access.subscribedAt.seconds 
+                      ? new Date(access.subscribedAt.seconds * 1000).toLocaleDateString()
+                      : new Date(access.startDate || Date.now()).toLocaleDateString()
+                    }
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-400">Expires On</p>
                   <p className="text-white font-medium">
-                    {new Date(access.expiresAt).toLocaleDateString()}
+                    {access.expiresAt 
+                      ? new Date(access.expiresAt).toLocaleDateString()
+                      : new Date(access.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()
+                    }
                   </p>
                 </div>
               </div>
