@@ -5,13 +5,6 @@ import { Shield, Download, Copy, ArrowLeft, ExternalLink, Check } from 'lucide-r
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
 import { ref, get, onValue, set } from 'firebase/database';
-import { 
-  checkToolAccess, 
-  getUserSubscriptions, 
-  completePaymentFlow,
-  verifyAndCompletePayment,
-  subscribeToUserSubscriptions 
-} from '../utils/firestorePayment';
 
 // Define types for the application
 interface ToolInfoItem {
@@ -134,7 +127,6 @@ const ToolAccess: React.FC = () => {
   const [toolPassword, setToolPassword] = useState<string | null>(null);
   const [paymentLoading, setPaymentLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [userSubscriptions, setUserSubscriptions] = useState<any[]>([]);
 
   // Fetch the tool token - defined outside useEffect to be accessible elsewhere
   const fetchToolToken = async (): Promise<void> => {
@@ -144,29 +136,6 @@ const ToolAccess: React.FC = () => {
     try {
       console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
       
-      // First try to get tokens from Firestore (new method)
-      try {
-        const { getTokensForTool } = await import('../utils/adminFirestore.js');
-        const tokenInfo = await getTokensForTool(toolId);
-        
-        if (tokenInfo.available) {
-          console.log(`Found tokens in Firestore for ${toolId}:`, tokenInfo);
-          
-          if (tokenInfo.type === 'credentials') {
-            setToolLoginId(tokenInfo.loginId);
-            setToolPassword(tokenInfo.password);
-          } else if (tokenInfo.type === 'token') {
-            setToolToken(tokenInfo.token);
-          }
-          
-          setIsLoading(false);
-          return;
-        }
-      } catch (firestoreError) {
-        console.log('Firestore token fetch failed, falling back to Realtime Database:', firestoreError);
-      }
-      
-      // Fallback to Realtime Database method
       // Special handling for Stealth Writer which uses ID/Password
       if (toolId === 'stealth_writer' || toolId === 'tool_19') {
         // First try the direct path in toolTokens
@@ -198,289 +167,207 @@ const ToolAccess: React.FC = () => {
             // If it's an object but doesn't have expected fields, stringify it
             const tokenString = JSON.stringify(data);
             setToolToken(tokenString);
-            setIsLoading(false);
-            return;
-          } else if (typeof data === 'string') {
-            // If it's a string, try to parse it as JSON
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed && typeof parsed === 'object') {
-                setToolLoginId(parsed.id || null);
-                setToolPassword(parsed.password || null);
-              } else {
-                setToolToken(data);
-              }
-            } catch (e) {
-              // If parsing fails, use the string as a token
-              setToolToken(data);
-            }
-            setIsLoading(false);
-            return;
+          } else {
+            // Simple string value
+            setToolToken(data.toString());
           }
+          setIsLoading(false);
+          return;
         }
         
-        // Try alternative paths
-        // Try looking directly in the root for tool_19
-        if (toolId === 'stealth_writer') {
-          const altRef = ref(db, 'tool_19');
-          const altSnapshot = await get(altRef);
-          
-          if (altSnapshot.exists()) {
-            const altData = altSnapshot.val();
-            console.log('Found data in alternate path tool_19:', altData);
-            
-            if (typeof altData === 'object' && altData !== null) {
-              setToolLoginId(altData.id || null);
-              setToolPassword(altData.password || null);
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
+        // If not found in toolTokens, try tool_19 path
+        const tool19Ref = ref(db, 'toolTokens/tool_19');
+        const tool19Snapshot = await get(tool19Ref);
         
-        // Try looking in toolCredentials
-        const credRef = ref(db, `toolCredentials/${toolId}`);
-        const credSnapshot = await get(credRef);
-        
-        if (credSnapshot.exists()) {
-          const credData = credSnapshot.val();
-          console.log(`Found credentials for ${toolId}:`, credData);
+        if (tool19Snapshot.exists()) {
+          const data = tool19Snapshot.val();
+          console.log('Found tool_19 data:', data);
           
-          if (typeof credData === 'object' && credData !== null) {
-            setToolLoginId(credData.id || null);
-            setToolPassword(credData.password || null);
-            setIsLoading(false);
-            return;
+          if (typeof data === 'object' && data !== null) {
+            setToolLoginId(data.id || null);
+            setToolPassword(data.password || null);
+          } else {
+            setToolToken(data.toString());
           }
+          setIsLoading(false);
+          return;
         }
       }
       
-      // Special handling for ChatGPT Plus which uses multiple tokens
-      if (toolId === 'chatgpt_plus' || toolId === 'tool_1') {
-        const tokenRef = ref(db, `toolTokens/tool_1`);
+      // For other tools, use the normal token fetching logic
+      // Try each possible mapping for this tool
+      const possibleIds = TOOL_ID_MAPPING[toolId!] || [toolId!];
+      
+      for (const possibleId of possibleIds) {
+        console.log(`Trying to fetch token with ID: ${possibleId}`);
+        
+        const tokenRef = ref(db, `toolTokens/${possibleId}`);
         const snapshot = await get(tokenRef);
         
         if (snapshot.exists()) {
           const data = snapshot.val();
-          console.log(`Found data for ${toolId}:`, data);
-          
-          // If it's already an array, use it directly
-          if (Array.isArray(data)) {
-            setToolToken(data);
-            setIsLoading(false);
-            return;
-          }
-          // If it's a string, convert it to a single-item array
-          else if (typeof data === 'string') {
-            setToolToken([data]);
-            setIsLoading(false);
-            return;
-          }
-          // If it's an object with a value property
-          else if (typeof data === 'object' && data !== null) {
-            if (data.value) {
-              if (Array.isArray(data.value)) {
-                setToolToken(data.value);
-              } else {
-                setToolToken([data.value]);
-              }
-              setIsLoading(false);
-              return;
-            }
-          }
+          console.log(`Found data for ${possibleId}:`, data);
+          setToolToken(data);
+          setIsLoading(false);
+          return;
         }
       }
       
-      // Get all possible IDs for this tool
-      const possibleIds = TOOL_ID_MAPPING[toolId] || [toolId];
-      
-      // Add standard variations if not in the mapping
-      if (!TOOL_ID_MAPPING[toolId]) {
-        // If toolId has a 'tool_' prefix, also try without it
-        if (toolId.startsWith('tool_')) {
-          possibleIds.push(toolId.substring(5));
-        }
-        // Also try with a 'tool_' prefix if it doesn't have one
-        else {
-          possibleIds.push(`tool_${toolId}`);
-        }
-        
-        // Try numeric ID if there are digits
-        const numericId = toolId.replace(/\D/g, '');
-        if (numericId) {
-          possibleIds.push(numericId);
-        }
-      }
-      
-      console.log(`Possible IDs for ${toolId}:`, possibleIds);
-      
-      // Generate all possible paths to check
-      const paths: string[] = [];
-      for (const id of possibleIds) {
-        paths.push(`toolTokens/${id}`);
-        paths.push(`toolTokens/${id}/value`);
-        paths.push(`sessionTokens/${id}`);
-        paths.push(`tokens/${id}`);
-        paths.push(`tool_tokens/${id}`);
-      }
-      
-      console.log("Trying the following paths:", paths);
-      
-      // Try all paths in sequence
-      for (const path of paths) {
-        console.log(`Trying path: ${path}`);
-        const tokenRef = ref(db, path);
-        const snapshot = await get(tokenRef);
-        
-        if (snapshot.exists()) {
-          console.log(`Found data at path ${path}:`, snapshot.val());
-          
-          // Determine how to extract the token based on data structure
-          if (typeof snapshot.val() === 'string') {
-            console.log('Token is direct string value:', snapshot.val());
-            setToolToken(snapshot.val());
-            setIsLoading(false);
-            return;
-          } else if (typeof snapshot.val() === 'object' && snapshot.val() !== null) {
-            if (snapshot.val().value) {
-              console.log('Token found in value property:', snapshot.val().value);
-              setToolToken(snapshot.val().value);
-              setIsLoading(false);
-              return;
-            } 
-            // If it's an object but doesn't have a value property, try to stringify it
-            else {
-              const tokenString = JSON.stringify(snapshot.val());
-              console.log('Converting object token to string:', tokenString);
-              setToolToken(tokenString);
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
-      }
-      
-      // Direct database listing as a last resort
-      console.log("No token found in standard paths. Listing all paths in toolTokens:");
-      const allTokensRef = ref(db, 'toolTokens');
-      const allTokensSnapshot = await get(allTokensRef);
-      if (allTokensSnapshot.exists()) {
-        console.log("Available tool tokens:", Object.keys(allTokensSnapshot.val()));
-      }
-      
-      console.log('No token found in any location for tool:', toolId);
-      setToolToken(null);
+      // If no token found, set loading to false
+      console.log(`No token found for any of the IDs: ${possibleIds.join(', ')}`);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching tool token:', error);
-      setToolToken(null);
-      setToolLoginId(null);
-      setToolPassword(null);
-    }
-    setIsLoading(false);
-  };
-
-  // Check for payment success in URL
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const txnId = urlParams.get('txnId');
-    const merchantTransactionId = urlParams.get('merchantTransactionId');
-    const transactionId = urlParams.get('transactionId');
-    
-    // Try different parameter names that PhonePe might use
-    const paymentId = txnId || merchantTransactionId || transactionId;
-    
-    console.log('🔍 Checking URL parameters:', {
-      txnId,
-      merchantTransactionId,
-      transactionId,
-      paymentId,
-      fullURL: location.href,
-      search: location.search
-    });
-    
-    if (paymentId && user) {
-      console.log('✅ Found payment ID, starting verification:', paymentId);
-      handlePaymentVerification(paymentId);
-    } else if (location.search && user) {
-      console.log('⚠️ URL has parameters but no payment ID found');
-      setError('Payment verification failed: No transaction ID found in URL. Please contact support if you completed a payment.');
-    }
-  }, [location.search, user]);
-
-  // Handle payment verification
-  const handlePaymentVerification = async (merchantTransactionId: string) => {
-    try {
-      setIsLoading(true);
-      console.log('🔍 Verifying payment:', merchantTransactionId);
-      
-      const result = await verifyAndCompletePayment(merchantTransactionId);
-      
-      if (result.success) {
-        setHasAccess(true);
-        setAccess(result.access);
-        setError('');
-        
-        // Show success message
-        alert('🎉 Payment successful! You now have access to this tool.');
-        
-        // Clean URL
-        navigate(location.pathname, { replace: true });
-      } else {
-        setError('Payment verification failed. Please contact support.');
-      }
-    } catch (error) {
-      console.error('❌ Error verifying payment:', error);
-      setError('Failed to verify payment. Please contact support.');
-    } finally {
       setIsLoading(false);
     }
   };
 
-  // Check tool access on component mount
+  // Handle payment verification from URL parameters
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const merchantTransactionId = urlParams.get('merchantTransactionId');
+    const status = urlParams.get('status');
+
+    if (merchantTransactionId && status) {
+      handlePaymentVerification(merchantTransactionId);
+    }
+  }, [location]);
+
+  // Handle payment verification
+  const handlePaymentVerification = async (merchantTransactionId: string) => {
+    try {
+      setPaymentLoading(true);
+      setError('');
+
+      console.log('🔍 Verifying payment:', merchantTransactionId);
+
+      // Call the verification API
+      const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net';
+      const response = await fetch(`${API_BASE_URL}/verifyPhonePePayment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          merchantTransactionId
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.status === 'completed') {
+        console.log('✅ Payment verified successfully');
+        showToast('Payment successful! You now have access to the tool.', 'success');
+        
+        // Refresh access status
+        await checkUserAccess();
+        await fetchToolToken();
+      } else {
+        setError('Payment verification failed. Please try again or contact support.');
+        showToast('Payment verification failed', 'error');
+      }
+
+    } catch (error) {
+      console.error('❌ Error verifying payment:', error);
+      setError('Failed to verify payment. Please try again.');
+      showToast('Payment verification error', 'error');
+    } finally {
+      setPaymentLoading(false);
+      
+      // Clean up URL parameters
+      const newUrl = window.location.pathname;
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
+
+  // Check user access and fetch data
   useEffect(() => {
     if (user && toolId) {
       checkUserAccess();
-      setupSubscriptionListener();
+      fetchToolToken();
     }
   }, [user, toolId]);
 
   const checkUserAccess = async () => {
     try {
       setIsLoading(true);
+      console.log(`🔍 Checking access for user ${user!.uid} and tool ${toolId}`);
       
-      // Check specific tool access
-      const accessResult = await checkToolAccess(user!.uid, toolId!);
-      setHasAccess(accessResult.hasAccess);
-      setAccess(accessResult.access);
+      // Check subscriptions in Realtime Database
+      const subscriptionsRef = ref(db, `subscriptions/${user!.uid}`);
+      const subscriptionsSnapshot = await get(subscriptionsRef);
       
-      // Get all user subscriptions
-      const subscriptions = await getUserSubscriptions(user!.uid);
-      setUserSubscriptions(subscriptions);
+      if (subscriptionsSnapshot.exists()) {
+        const subscriptionsData = subscriptionsSnapshot.val();
+        console.log('Found subscriptions in Realtime DB:', subscriptionsData);
+        
+        // Check if current tool is in subscriptions
+        const toolSubscription = subscriptionsData[toolId!];
+        
+        if (toolSubscription && toolSubscription.isActive) {
+          console.log('✅ Active subscription found in Realtime DB for tool:', toolId);
+          
+          // Convert Realtime DB format to expected format
+          const accessData = {
+            id: `${user!.uid}_${toolId}`,
+            userId: user!.uid,
+            toolId: toolId!,
+            toolName: toolSubscription.toolName || getToolName(toolId!),
+            isActive: true,
+            subscribedAt: { seconds: Math.floor(toolSubscription.startDate / 1000) },
+            expiresAt: new Date(toolSubscription.endDate),
+            paymentMethod: toolSubscription.paymentMethod || 'admin_activation'
+          };
+          
+          setHasAccess(true);
+          setAccess(accessData);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // Check tools in Realtime Database (alternative location)
+      const toolsRef = ref(db, `users/${user!.uid}/tools/${toolId}`);
+      const toolsSnapshot = await get(toolsRef);
+      
+      if (toolsSnapshot.exists()) {
+        const toolData = toolsSnapshot.val();
+        console.log('Found tool access in users/tools:', toolData);
+        
+        if (toolData.isActive || toolData.status === 'active') {
+          console.log('✅ Active tool found in Realtime DB users/tools');
+          
+          const accessData = {
+            id: `${user!.uid}_${toolId}`,
+            userId: user!.uid,
+            toolId: toolId!,
+            toolName: toolData.toolName || getToolName(toolId!),
+            isActive: true,
+            subscribedAt: { seconds: Math.floor((toolData.startDate || Date.now()) / 1000) },
+            expiresAt: new Date(toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
+            paymentMethod: 'admin_activation'
+          };
+          
+          setHasAccess(true);
+          setAccess(accessData);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      // No access found
+      console.log('❌ No access found in database');
+      setHasAccess(false);
+      setAccess(null);
       
     } catch (error) {
       console.error('❌ Error checking tool access:', error);
       setError('Failed to check access. Please try again.');
+      setHasAccess(false);
+      setAccess(null);
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Setup real-time subscription listener
-  const setupSubscriptionListener = () => {
-    if (!user) return;
-
-    const unsubscribe = subscribeToUserSubscriptions(user.uid, (subscriptions) => {
-      setUserSubscriptions(subscriptions);
-      
-      // Check if current tool is in active subscriptions
-      const currentToolSubscription = subscriptions.find(sub => sub.toolId === toolId);
-      if (currentToolSubscription) {
-        setHasAccess(true);
-        setAccess(currentToolSubscription);
-      }
-    });
-
-    return unsubscribe;
   };
 
   const handlePurchase = async () => {
@@ -498,9 +385,24 @@ const ToolAccess: React.FC = () => {
 
       console.log('🚀 Starting payment flow for:', toolName);
 
-      const result = await completePaymentFlow(user.uid, toolId, toolName, amount);
+      // Call PhonePe payment initialization
+      const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net';
+      const response = await fetch(`${API_BASE_URL}/initializePhonePePayment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.uid,
+          toolId: toolId,
+          toolName: toolName,
+          amount: amount
+        })
+      });
 
-      if (result.success) {
+      const result = await response.json();
+
+      if (result.success && result.paymentUrl) {
         console.log('💳 Redirecting to payment:', result.paymentUrl);
         
         // Redirect to PhonePe payment page
@@ -621,26 +523,6 @@ const ToolAccess: React.FC = () => {
                 </button>
               </div>
             </div>
-
-            {/* All Active Subscriptions */}
-            {userSubscriptions.length > 1 && (
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-white mb-4">All Active Subscriptions</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {userSubscriptions.map((sub) => (
-                    <div key={sub.id} className="bg-gray-700 rounded-lg p-4">
-                      <h4 className="font-medium text-white">{sub.toolName}</h4>
-                      <p className="text-sm text-gray-400">
-                        Expires: {new Date(sub.expiresAt).toLocaleDateString()}
-                      </p>
-                      <span className="inline-block bg-green-500 text-white text-xs px-2 py-1 rounded mt-2">
-                        Active
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -739,23 +621,6 @@ const ToolAccess: React.FC = () => {
               <p>📞 24/7 support available</p>
               <p>🔄 Instant activation after payment</p>
             </div>
-
-            {/* Debug info for development */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-6 p-4 bg-gray-700 rounded-lg text-left">
-                <h4 className="text-white font-medium mb-2">Debug Info:</h4>
-                <pre className="text-xs text-gray-300 overflow-auto">
-                  {JSON.stringify({
-                    userId: user?.uid,
-                    toolId,
-                    hasAccess,
-                    error,
-                    urlParams: location.search,
-                    userSubscriptions: userSubscriptions.length
-                  }, null, 2)}
-                </pre>
-              </div>
-            )}
           </div>
         </div>
       </div>

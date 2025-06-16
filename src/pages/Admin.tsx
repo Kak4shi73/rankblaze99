@@ -424,102 +424,77 @@ const Admin = () => {
 
   const assignToolToUser = async (userId: string, toolName: string, price: number = 133) => {
     try {
-      // Use new Firestore-based admin grant function
-      const { adminGrantToolFirestore } = await import('../utils/adminFirestore.js');
+      const now = new Date().toISOString();
       
-      const result = await adminGrantToolFirestore(userId, toolName, price);
+      // Check if the user already has this tool in any active subscription
+      const activeSubscription = subscriptions.find(sub => 
+        sub.userId === userId && 
+        sub.status === 'active' && 
+        sub.tools && 
+        (sub.tools.some(t => typeof t === 'object' 
+          ? t.id === toolName && t.status === 'active'
+          : t === toolName))
+      );
       
-      if (result.success) {
-        showToast(`Tool "${result.toolId}" assigned to user successfully via Firestore`, 'success');
-        
-        // Refresh data to show updated information
-        await fetchData();
-      } else {
-        showToast('Failed to assign tool', 'error');
-      }
-    } catch (error) {
-      console.error('Error assigning tool:', error);
-      
-      // If Firestore method fails, fallback to old method
-      if (error.message?.includes('already-exists')) {
+      if (activeSubscription) {
         showToast(`User already has access to "${toolName}" tool`, 'info');
         return;
       }
       
-      // Fallback to old Realtime Database method
-      try {
-        const now = new Date().toISOString();
-        
-        // Check if the user already has this tool in any active subscription
-        const activeSubscription = subscriptions.find(sub => 
-          sub.userId === userId && 
-          sub.status === 'active' && 
-          sub.tools && 
-          (sub.tools.some(t => typeof t === 'object' 
-            ? t.id === toolName && t.status === 'active'
-            : t === toolName))
-        );
-        
-        if (activeSubscription) {
-          showToast(`User already has access to "${toolName}" tool`, 'info');
-          return;
-        }
-        
-        // Find active subscription to add the tool to
-        const userActiveSubscription = subscriptions.find(sub => 
-          sub.userId === userId && sub.status === 'active'
-        );
-        
-        if (userActiveSubscription) {
-          // Create a payment record for the tool ONLY IF we're adding a new tool
-          const toolPaymentId = `tool_payment_${Date.now()}`;
-          const paymentRef = ref(db, `payments/${toolPaymentId}`);
-          const paymentData = {
-            userId,
-            toolId: toolName,
-            amount: price,
-            status: 'completed',
-            paymentMethod: 'admin_assignment',
-            createdAt: now
-          };
+      // Find active subscription to add the tool to
+      const userActiveSubscription = subscriptions.find(sub => 
+        sub.userId === userId && sub.status === 'active'
+      );
+      
+      if (userActiveSubscription) {
+        // Create a payment record for the tool ONLY IF we're adding a new tool
+        const toolPaymentId = `tool_payment_${Date.now()}`;
+        const paymentRef = ref(db, `payments/${toolPaymentId}`);
+        const paymentData = {
+          userId,
+          toolId: toolName,
+          amount: price,
+          status: 'completed',
+          paymentMethod: 'admin_assignment',
+          createdAt: now
+        };
 
-          // Update the subscription with the new tool
-          const subRef = ref(db, `subscriptions/${userActiveSubscription.id}`);
+        // Update the subscription with the new tool
+        const subRef = ref(db, `subscriptions/${userActiveSubscription.id}`);
+        
+        // Make sure we don't add duplicate tools
+        const currentTools = userActiveSubscription.tools || [];
+        const toolExists = currentTools.some(t => 
+          typeof t === 'object' ? t.id === toolName : t === toolName
+        );
+        
+        if (!toolExists) {
+          // Create payment record only when actually adding a new tool
+          await set(paymentRef, paymentData);
           
-          // Make sure we don't add duplicate tools
-          const currentTools = userActiveSubscription.tools || [];
-          const toolExists = currentTools.some(t => 
-            typeof t === 'object' ? t.id === toolName : t === toolName
+          // Convert all tools to objects if they aren't already
+          const updatedTools = currentTools.map(t => 
+            typeof t === 'object' ? t : { id: t, status: 'active' }
           );
           
-          if (!toolExists) {
-            // Create payment record only when actually adding a new tool
-            await set(paymentRef, paymentData);
-            
-            // Convert all tools to objects if they aren't already
-            const updatedTools = currentTools.map(t => 
-              typeof t === 'object' ? t : { id: t, status: 'active' }
-            );
-            
-            // Add the new tool as an object
-            updatedTools.push({ id: toolName, status: 'active' });
-            
-            await update(subRef, {
-              tools: updatedTools,
-              updatedAt: now
-            });
-          }
-        } else {
-          // If no active subscription exists, create one with this tool
-          await handleSubscriptionUpdate(userId, 'active', toolName);
-          return; // handleSubscriptionUpdate already adds default tools including this one
+          // Add the new tool as an object
+          updatedTools.push({ id: toolName, status: 'active' });
+          
+          await update(subRef, {
+            tools: updatedTools,
+            updatedAt: now
+          });
         }
-        
-        showToast(`Tool "${toolName}" assigned to user successfully (fallback method)`, 'success');
-      } catch (fallbackError) {
-        console.error('Fallback method also failed:', fallbackError);
-        showToast('Failed to assign tool with both methods', 'error');
+      } else {
+        // If no active subscription exists, create one with this tool
+        await handleSubscriptionUpdate(userId, 'active', toolName);
+        return; // handleSubscriptionUpdate already adds default tools including this one
       }
+      
+      showToast(`Tool "${toolName}" assigned to user successfully`, 'success');
+    } catch (error) {
+      console.error('Error assigning tool:', error);
+      showToast('Failed to assign tool', 'error');
     }
   };
 
