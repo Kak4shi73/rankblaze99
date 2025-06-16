@@ -138,7 +138,6 @@ const ToolAccess: React.FC = () => {
   const fetchToolToken = async (): Promise<void> => {
     if (!toolId) return;
     
-    setIsLoading(true);
     try {
       console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
       
@@ -158,7 +157,6 @@ const ToolAccess: React.FC = () => {
             if (data.id || data.password) {
               setToolLoginId(data.id || null);
               setToolPassword(data.password || null);
-              setIsLoading(false);
               return;
             }
             
@@ -166,7 +164,6 @@ const ToolAccess: React.FC = () => {
             if (data.tool_19 && typeof data.tool_19 === 'object') {
               setToolLoginId(data.tool_19.id || null);
               setToolPassword(data.tool_19.password || null);
-              setIsLoading(false);
               return;
             }
             
@@ -177,7 +174,6 @@ const ToolAccess: React.FC = () => {
             // Simple string value
             setToolToken(data.toString());
           }
-          setIsLoading(false);
           return;
         }
         
@@ -195,7 +191,23 @@ const ToolAccess: React.FC = () => {
           } else {
             setToolToken(data.toString());
           }
-          setIsLoading(false);
+          return;
+        }
+        
+        // Also try direct path for tool_19
+        const directTool19Ref = ref(db, 'tool_19');
+        const directTool19Snapshot = await get(directTool19Ref);
+        
+        if (directTool19Snapshot.exists()) {
+          const data = directTool19Snapshot.val();
+          console.log('Found direct tool_19 data:', data);
+          
+          if (typeof data === 'object' && data !== null) {
+            setToolLoginId(data.id || null);
+            setToolPassword(data.password || null);
+          } else {
+            setToolToken(data.toString());
+          }
           return;
         }
       }
@@ -213,18 +225,32 @@ const ToolAccess: React.FC = () => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           console.log(`Found data for ${possibleId}:`, data);
-          setToolToken(data);
-          setIsLoading(false);
+          
+          // Handle different token formats
+          if (Array.isArray(data)) {
+            // For tools with multiple tokens (like ChatGPT Plus)
+            setToolToken(data);
+          } else if (typeof data === 'object' && data !== null) {
+            // For objects, check if it has a value property or is direct token
+            if (data.value) {
+              setToolToken(data.value);
+            } else {
+              // For complex objects, stringify them
+              setToolToken(JSON.stringify(data));
+            }
+          } else {
+            // Simple string or number token
+            setToolToken(data.toString());
+          }
           return;
         }
       }
       
-      // If no token found, set loading to false
+      // If no token found, log it
       console.log(`No token found for any of the IDs: ${possibleIds.join(', ')}`);
-      setIsLoading(false);
+      
     } catch (error) {
       console.error('Error fetching tool token:', error);
-      setIsLoading(false);
     }
   };
 
