@@ -1,617 +1,557 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Download, Copy, ArrowLeft, ExternalLink, Check } from 'lucide-react';
+import { Copy, Download, ArrowLeft, Check, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { db } from '../config/firebase';
-import { ref, get, onValue, set } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 
-// Define types for the application
-interface ToolInfoItem {
-  name: string;
-  icon: string;
-  description: string;
-  downloadUrl: string;
-  toolUrl: string;
-  useIdPassword?: boolean; // Flag to indicate if this tool uses ID/Password instead of token
+interface ToolCredentials {
+  id?: string;
+  password?: string;
 }
 
-interface ToolInfoMap {
-  [key: string]: ToolInfoItem;
-  default: ToolInfoItem;
-}
-
-interface Access {
-  id: string;
-  userId: string;
+interface UserAccess {
   toolId: string;
   toolName: string;
   isActive: boolean;
   startDate?: number;
   endDate?: number;
-  subscribedAt?: { seconds: number } | number;
-  expiresAt?: Date | number;
   paymentMethod?: string;
-  status?: string;
-  tools?: Array<{ id: string; name: string; }>;
-}
-
-// Define tool information for rendering
-const TOOL_INFO: ToolInfoMap = {
-  chatgpt_plus: {
-    name: 'ChatGPT Plus',
-    icon: '🤖',
-    description: 'Access to advanced AI capabilities and GPT-4',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://chat.openai.com/'
-  },
-  envato_elements: {
-    name: 'Envato Elements',
-    icon: '🎨',
-    description: 'Unlimited downloads of templates, photos, graphics, and more',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://elements.envato.com/'
-  },
-  canva_pro: {
-    name: 'Canva Pro',
-    icon: '✏️',
-    description: 'Design anything with premium templates and assets',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://www.canva.com/'
-  },
-  storyblocks: {
-    name: 'Storyblocks',
-    icon: '🎬',
-    description: 'Access to royalty-free video, audio, and images',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://www.storyblocks.com/'
-  },
-  semrush: {
-    name: 'SEMrush',
-    icon: '📈',
-    description: 'Advanced SEO and competitive analysis tools',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://www.semrush.com/'
-  },
-  stealth_writer: {
-    name: 'Stealth Writer',
-    icon: '✍️',
-    description: 'Advanced AI content creation tool with plagiarism avoidance',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://stealthwriter.ai/',
-    useIdPassword: true // This tool uses ID and password instead of token
-  },
-  hix_bypass: {
-    name: 'Hix Bypass',
-    icon: '🔓',
-    description: 'Advanced content protection bypass tool for researchers',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: 'https://hixbypass.com/'
-  },
-  // Default for any tool not specifically defined
-  default: {
-    name: 'Premium Tool',
-    icon: '⚡',
-    description: 'Access to premium features and capabilities',
-    downloadUrl: 'https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file',
-    toolUrl: '#'
-  }
-};
-
-// Mapping of tool IDs to possible Firebase token IDs
-const TOOL_ID_MAPPING: Record<string, string[]> = {
-  'chatgpt_plus': ['chatgpt_plus', 'chatgpt', 'tool_1', '1'],
-  'envato_elements': ['envato_elements', 'envato', 'tool_2', '2'],
-  'canva_pro': ['canva_pro', 'canva', 'tool_3', '3'],
-  'storyblocks': ['storyblocks', 'tool_4', '4'],
-  'semrush': ['semrush', 'tool_5', '5'],
-  'stealth_writer': ['stealth_writer', 'tool_19', '19'],
-  'hix_bypass': ['hix_bypass', 'tool_20', '20'],
-  // Add more mappings as needed
-};
-
-interface RouteParams {
-  toolId: string;
-  [key: string]: string;
 }
 
 const ToolAccess: React.FC = () => {
-  const { toolId } = useParams<RouteParams>();
+  const { toolId } = useParams<{ toolId: string }>();
   const { user } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [hasAccess, setHasAccess] = useState<boolean>(false);
-  const [access, setAccess] = useState<Access | null>(null);
-  const [toolInfo, setToolInfo] = useState<ToolInfoItem | null>(null);
-  const [tokenCopied, setTokenCopied] = useState<boolean | string>(false);
-  const [idCopied, setIdCopied] = useState<boolean>(false);
-  const [passwordCopied, setPasswordCopied] = useState<boolean>(false);
-  const [toolToken, setToolToken] = useState<string | string[] | null>(null);
-  const [toolLoginId, setToolLoginId] = useState<string | null>(null);
-  const [toolPassword, setToolPassword] = useState<string | null>(null);
-  const [paymentLoading, setPaymentLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
+  
+  // State management
+  const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [userAccess, setUserAccess] = useState<UserAccess | null>(null);
+  const [tokens, setTokens] = useState<string[]>([]);
+  const [singleToken, setSingleToken] = useState<string>('');
+  const [credentials, setCredentials] = useState<ToolCredentials>({});
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copiedField, setCopiedField] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
-  // Fetch the tool token - defined outside useEffect to be accessible elsewhere
-  const fetchToolToken = async (): Promise<void> => {
-    if (!toolId) return;
-    
-    try {
-      console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
-      
-      // Special handling for Stealth Writer which uses ID/Password
-      if (toolId === 'stealth_writer' || toolId === 'tool_19') {
-        // First try the direct path in toolTokens
-        const tokenRef = ref(db, `toolTokens/${toolId}`);
-        const snapshot = await get(tokenRef);
-        
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          console.log(`Found data for ${toolId}:`, data);
-          
-          // Handle different data structures
-          if (typeof data === 'object' && data !== null) {
-            // Direct object with id/password fields
-            if (data.id || data.password) {
-              setToolLoginId(data.id || null);
-              setToolPassword(data.password || null);
-              return;
-            }
-            
-            // Check for nested fields like tool_19.id
-            if (data.tool_19 && typeof data.tool_19 === 'object') {
-              setToolLoginId(data.tool_19.id || null);
-              setToolPassword(data.tool_19.password || null);
-              return;
-            }
-            
-            // If it's an object but doesn't have expected fields, stringify it
-            const tokenString = JSON.stringify(data);
-            setToolToken(tokenString);
-          } else {
-            // Simple string value
-            setToolToken(data.toString());
-          }
-          return;
-        }
-        
-        // If not found in toolTokens, try tool_19 path
-        const tool19Ref = ref(db, 'toolTokens/tool_19');
-        const tool19Snapshot = await get(tool19Ref);
-        
-        if (tool19Snapshot.exists()) {
-          const data = tool19Snapshot.val();
-          console.log('Found tool_19 data:', data);
-          
-          if (typeof data === 'object' && data !== null) {
-            setToolLoginId(data.id || null);
-            setToolPassword(data.password || null);
-          } else {
-            setToolToken(data.toString());
-          }
-          return;
-        }
-        
-        // Also try direct path for tool_19
-        const directTool19Ref = ref(db, 'tool_19');
-        const directTool19Snapshot = await get(directTool19Ref);
-        
-        if (directTool19Snapshot.exists()) {
-          const data = directTool19Snapshot.val();
-          console.log('Found direct tool_19 data:', data);
-          
-          if (typeof data === 'object' && data !== null) {
-            setToolLoginId(data.id || null);
-            setToolPassword(data.password || null);
-          } else {
-            setToolToken(data.toString());
-          }
-          return;
-        }
-      }
-      
-      // For other tools, use the normal token fetching logic
-      // Try each possible mapping for this tool
-      const possibleIds = TOOL_ID_MAPPING[toolId!] || [toolId!];
-      
-      for (const possibleId of possibleIds) {
-        console.log(`Trying to fetch token with ID: ${possibleId}`);
-        
-        const tokenRef = ref(db, `toolTokens/${possibleId}`);
-        const snapshot = await get(tokenRef);
-        
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          console.log(`Found data for ${possibleId}:`, data);
-          
-          // Handle different token formats
-          if (Array.isArray(data)) {
-            // For tools with multiple tokens (like ChatGPT Plus)
-            setToolToken(data);
-          } else if (typeof data === 'object' && data !== null) {
-            // For objects, check if it has a value property or is direct token
-            if (data.value) {
-              setToolToken(data.value);
-            } else {
-              // For complex objects, stringify them
-              setToolToken(JSON.stringify(data));
-            }
-          } else {
-            // Simple string or number token
-            setToolToken(data.toString());
-          }
-          return;
-        }
-      }
-      
-      // If no token found, log it
-      console.log(`No token found for any of the IDs: ${possibleIds.join(', ')}`);
-      
-    } catch (error) {
-      console.error('Error fetching tool token:', error);
+  // Tool configuration
+  const toolConfig = {
+    'chatgpt_plus': {
+      name: 'ChatGPT Plus',
+      icon: '🤖',
+      description: 'Access to ChatGPT Plus with GPT-4 and advanced features',
+      price: 199,
+      tokenPaths: ['tool_1', 'chatgpt_plus', 'chatgpt'],
+      useCredentials: false,
+      url: 'https://chat.openai.com/'
+    },
+    'envato_elements': {
+      name: 'Envato Elements',
+      icon: '🎨',
+      description: 'Unlimited downloads from Envato Elements library',
+      price: 299,
+      tokenPaths: ['tool_2', 'envato_elements', 'envato'],
+      useCredentials: false,
+      url: 'https://elements.envato.com/'
+    },
+    'canva_pro': {
+      name: 'Canva Pro',
+      icon: '✏️',
+      description: 'Professional design tools and premium templates',
+      price: 249,
+      tokenPaths: ['tool_3', 'canva_pro', 'canva'],
+      useCredentials: false,
+      url: 'https://www.canva.com/'
+    },
+    'storyblocks': {
+      name: 'Storyblocks',
+      icon: '🎬',
+      description: 'Unlimited stock videos, audio, and images',
+      price: 399,
+      tokenPaths: ['tool_4', 'storyblocks'],
+      useCredentials: false,
+      url: 'https://www.storyblocks.com/'
+    },
+    'semrush': {
+      name: 'SEMrush',
+      icon: '📈',
+      description: 'Complete SEO and digital marketing toolkit',
+      price: 499,
+      tokenPaths: ['tool_5', 'semrush'],
+      useCredentials: false,
+      url: 'https://www.semrush.com/'
+    },
+    'stealth_writer': {
+      name: 'Stealth Writer',
+      icon: '✍️',
+      description: 'AI content writer that bypasses detection',
+      price: 199,
+      tokenPaths: ['tool_19', 'stealth_writer'],
+      useCredentials: true,
+      url: 'https://stealthwriter.ai/'
+    },
+    'hix_bypass': {
+      name: 'Hix Bypass',
+      icon: '🔓',
+      description: 'Bypass AI detection for your content',
+      price: 149,
+      tokenPaths: ['tool_20', 'hix_bypass'],
+      useCredentials: false,
+      url: 'https://hixbypass.com/'
     }
   };
 
-  // Handle payment verification from URL parameters
-  useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const merchantTransactionId = urlParams.get('merchantTransactionId');
-    const status = urlParams.get('status');
-
-    if (merchantTransactionId && status) {
-      handlePaymentVerification(merchantTransactionId);
-    }
-  }, [location]);
-
-  // Handle payment verification
-  const handlePaymentVerification = async (merchantTransactionId: string) => {
-    try {
-      setPaymentLoading(true);
-      setError('');
-
-      console.log('🔍 Verifying payment:', merchantTransactionId);
-
-      // Call the verification API
-      const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net';
-      const response = await fetch(`${API_BASE_URL}/verifyPhonePePayment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          merchantTransactionId
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success && result.status === 'completed') {
-        console.log('✅ Payment verified successfully');
-        showToast('Payment successful! You now have access to the tool.', 'success');
-        
-        // Refresh access status
-        await checkUserAccess();
-        await fetchToolToken();
-      } else {
-        setError('Payment verification failed. Please try again or contact support.');
-        showToast('Payment verification failed', 'error');
-      }
-
-    } catch (error) {
-      console.error('❌ Error verifying payment:', error);
-      setError('Failed to verify payment. Please try again.');
-      showToast('Payment verification error', 'error');
-    } finally {
-      setPaymentLoading(false);
-      
-      // Clean up URL parameters
-      const newUrl = window.location.pathname;
-      window.history.replaceState(null, '', newUrl);
-    }
+  const currentTool = toolConfig[toolId as keyof typeof toolConfig] || {
+    name: 'Premium Tool',
+    icon: '⚡',
+    description: 'Premium tool access',
+    price: 199,
+    tokenPaths: [toolId || ''],
+    useCredentials: false,
+    url: '#'
   };
 
-  // Check user access and fetch data
-  useEffect(() => {
-    if (user && toolId) {
-      checkUserAccess();
-      fetchToolToken();
-    }
-  }, [user, toolId]);
-
+  // Check user access in Realtime Database
   const checkUserAccess = async () => {
+    if (!user || !toolId) return;
+
     try {
-      setIsLoading(true);
-      console.log(`🔍 Checking access for user ${user!.uid} and tool ${toolId}`);
-      
-      // Check subscriptions in Realtime Database - correct structure
+      setLoading(true);
+      console.log(`🔍 Checking access for user: ${user.uid}, tool: ${toolId}`);
+
+      // Check new subscription structure
       const subscriptionsRef = ref(db, 'subscriptions');
       const subscriptionsSnapshot = await get(subscriptionsRef);
-      
+
       if (subscriptionsSnapshot.exists()) {
         const allSubscriptions = subscriptionsSnapshot.val();
-        console.log('Found subscriptions in Realtime DB:', allSubscriptions);
         
         // Find user's active subscription
         const userSubscription = Object.values(allSubscriptions).find((sub: any) => 
-          sub.userId === user!.uid && sub.status === 'active'
+          sub.userId === user.uid && sub.status === 'active'
         ) as any;
-        
-        if (userSubscription && userSubscription.tools) {
-          console.log('Found user subscription:', userSubscription);
-          
-          // Check if the current tool is in the tools array
+
+        if (userSubscription?.tools) {
           const toolAccess = userSubscription.tools.find((tool: any) => {
             if (typeof tool === 'object') {
               return tool.id === toolId && tool.status === 'active';
             }
             return tool === toolId;
           });
-          
+
           if (toolAccess) {
-            console.log('✅ Active tool access found in subscription:', toolAccess);
-            
-            const accessData: Access = {
-              id: `${user!.uid}_${toolId}`,
-              userId: user!.uid,
-              toolId: toolId!,
-              toolName: getToolName(toolId!),
+            console.log('✅ Access found in new structure');
+            setHasAccess(true);
+            setUserAccess({
+              toolId,
+              toolName: currentTool.name,
               isActive: true,
               startDate: new Date(userSubscription.startDate).getTime(),
               endDate: new Date(userSubscription.endDate).getTime(),
-              subscribedAt: { seconds: Math.floor(new Date(userSubscription.startDate).getTime() / 1000) },
-              expiresAt: new Date(userSubscription.endDate),
-              paymentMethod: 'admin_activation'
-            };
-            
-            setHasAccess(true);
-            setAccess(accessData);
-            setIsLoading(false);
+              paymentMethod: userSubscription.paymentMethod || 'admin_activation'
+            });
+            await fetchToolTokens();
             return;
           }
         }
       }
-      
-      // Fallback: Check subscriptions using old structure (userId path)
-      const userSubscriptionsRef = ref(db, `subscriptions/${user!.uid}`);
-      const userSubscriptionsSnapshot = await get(userSubscriptionsRef);
-      
-      if (userSubscriptionsSnapshot.exists()) {
-        const subscriptionsData = userSubscriptionsSnapshot.val();
-        console.log('Found user subscriptions (old structure):', subscriptionsData);
-        
-        // Check if current tool is in subscriptions
-        const toolSubscription = subscriptionsData[toolId!];
-        
-        if (toolSubscription && toolSubscription.isActive) {
-          console.log('✅ Active subscription found in old structure for tool:', toolId);
-          
-          const accessData: Access = {
-            id: `${user!.uid}_${toolId}`,
-            userId: user!.uid,
-            toolId: toolId!,
-            toolName: toolSubscription.toolName || getToolName(toolId!),
-            isActive: true,
-            startDate: toolSubscription.startDate,
-            endDate: toolSubscription.endDate,
-            subscribedAt: toolSubscription.startDate ? { seconds: Math.floor(toolSubscription.startDate / 1000) } : { seconds: Math.floor(Date.now() / 1000) },
-            expiresAt: new Date(toolSubscription.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
-            paymentMethod: toolSubscription.paymentMethod || 'admin_activation'
-          };
-          
+
+      // Check old subscription structure
+      const oldSubRef = ref(db, `subscriptions/${user.uid}/${toolId}`);
+      const oldSubSnapshot = await get(oldSubRef);
+
+      if (oldSubSnapshot.exists()) {
+        const subData = oldSubSnapshot.val();
+        if (subData.isActive) {
+          console.log('✅ Access found in old structure');
           setHasAccess(true);
-          setAccess(accessData);
-          setIsLoading(false);
+          setUserAccess({
+            toolId,
+            toolName: subData.toolName || currentTool.name,
+            isActive: true,
+            startDate: subData.startDate,
+            endDate: subData.endDate,
+            paymentMethod: subData.paymentMethod || 'admin_activation'
+          });
+          await fetchToolTokens();
           return;
         }
       }
-      
-      // Check tools in Realtime Database (alternative location)
-      const toolsRef = ref(db, `users/${user!.uid}/tools/${toolId}`);
+
+      // Check alternative location
+      const toolsRef = ref(db, `users/${user.uid}/tools/${toolId}`);
       const toolsSnapshot = await get(toolsRef);
-      
+
       if (toolsSnapshot.exists()) {
         const toolData = toolsSnapshot.val();
-        console.log('Found tool access in users/tools:', toolData);
-        
         if (toolData.isActive || toolData.status === 'active') {
-          console.log('✅ Active tool found in Realtime DB users/tools');
-          
-          const accessData: Access = {
-            id: `${user!.uid}_${toolId}`,
-            userId: user!.uid,
-            toolId: toolId!,
-            toolName: toolData.toolName || getToolName(toolId!),
+          console.log('✅ Access found in users/tools');
+          setHasAccess(true);
+          setUserAccess({
+            toolId,
+            toolName: toolData.toolName || currentTool.name,
             isActive: true,
             startDate: toolData.startDate || Date.now(),
-            endDate: toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000,
-            subscribedAt: { seconds: Math.floor((toolData.startDate || Date.now()) / 1000) },
-            expiresAt: new Date(toolData.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000),
+            endDate: toolData.endDate || Date.now() + (30 * 24 * 60 * 60 * 1000),
             paymentMethod: 'admin_activation'
-          };
-          
-          setHasAccess(true);
-          setAccess(accessData);
-          setIsLoading(false);
+          });
+          await fetchToolTokens();
           return;
         }
       }
-      
-      // No access found
-      console.log('❌ No access found in database');
+
+      console.log('❌ No access found');
       setHasAccess(false);
-      setAccess(null);
+      setUserAccess(null);
       
     } catch (error) {
-      console.error('❌ Error checking tool access:', error);
+      console.error('❌ Error checking access:', error);
       setError('Failed to check access. Please try again.');
-      setHasAccess(false);
-      setAccess(null);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handlePurchase = async () => {
-    if (!user || !toolId) {
-      setError('Please login to purchase');
-      return;
-    }
+  // Fetch tool tokens/credentials from Realtime Database
+  const fetchToolTokens = async () => {
+    if (!toolId) return;
 
     try {
-      setPaymentLoading(true);
-      setError('');
+      console.log(`🔑 Fetching tokens for ${toolId}`);
+      const tokenPaths = currentTool.tokenPaths;
 
-      const toolName = getToolName(toolId);
-      const amount = getToolPrice(toolId);
+      for (const path of tokenPaths) {
+        const tokenRef = ref(db, `toolTokens/${path}`);
+        const snapshot = await get(tokenRef);
 
-      console.log('🚀 Starting payment flow for:', toolName);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          console.log(`Found data for ${path}:`, data);
 
-      // Call PhonePe payment initialization
-      const API_BASE_URL = 'https://us-central1-rankblaze-138f7.cloudfunctions.net';
-      const response = await fetch(`${API_BASE_URL}/initializePhonePePayment`, {
+          if (currentTool.useCredentials) {
+            // Handle credentials (ID/Password)
+            if (typeof data === 'object' && data !== null) {
+              setCredentials({
+                id: data.id || '',
+                password: data.password || ''
+              });
+            }
+          } else {
+            // Handle tokens
+            if (Array.isArray(data)) {
+              setTokens(data.filter(token => token && token.trim()));
+            } else if (typeof data === 'object' && data.value) {
+              setSingleToken(data.value);
+            } else if (typeof data === 'string') {
+              setSingleToken(data);
+            }
+          }
+          return;
+        }
+      }
+
+      console.log(`No tokens found for ${toolId}`);
+      
+    } catch (error) {
+      console.error('Error fetching tokens:', error);
+    }
+  };
+
+  // Copy to clipboard function
+  const copyToClipboard = async (text: string, type: string, index?: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === 'token' && typeof index === 'number') {
+        setCopiedIndex(index);
+        setTimeout(() => setCopiedIndex(null), 2000);
+      } else {
+        setCopiedField(type);
+        setTimeout(() => setCopiedField(''), 2000);
+      }
+      showToast('Copied to clipboard!', 'success');
+    } catch (error) {
+      showToast('Failed to copy', 'error');
+    }
+  };
+
+  // Handle purchase
+  const handlePurchase = async () => {
+    if (!user || !toolId) return;
+
+    try {
+      setLoading(true);
+      console.log('🚀 Starting payment flow...');
+
+      const response = await fetch('https://us-central1-rankblaze-138f7.cloudfunctions.net/initializePhonePePayment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.uid,
           toolId: toolId,
-          toolName: toolName,
-          amount: amount
+          toolName: currentTool.name,
+          amount: currentTool.price
         })
       });
 
       const result = await response.json();
 
       if (result.success && result.paymentUrl) {
-        console.log('💳 Redirecting to payment:', result.paymentUrl);
-        
-        // Redirect to PhonePe payment page
         window.location.href = result.paymentUrl;
       } else {
         setError('Failed to initialize payment. Please try again.');
       }
-
     } catch (error) {
-      console.error('❌ Error in purchase flow:', error);
-      setError('Failed to start payment process. Please try again.');
+      console.error('Payment error:', error);
+      setError('Failed to start payment process.');
     } finally {
-      setPaymentLoading(false);
+      setLoading(false);
     }
   };
 
-  // ... existing code for getToolName, getToolPrice, getToolDescription functions ...
+  // Effects
+  useEffect(() => {
+    if (user && toolId) {
+      checkUserAccess();
+    }
+  }, [user, toolId]);
 
-  if (isLoading) {
+  // Loading state
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mx-auto mb-4"></div>
           <p className="text-white text-xl">Checking access...</p>
         </div>
       </div>
     );
   }
 
+  // Login required
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="bg-gray-800 p-8 rounded-lg shadow-xl text-center">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
+          <div className="text-6xl mb-4">🔒</div>
           <h2 className="text-2xl font-bold text-white mb-4">Login Required</h2>
           <p className="text-gray-300 mb-6">Please login to access this tool</p>
           <button
             onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors w-full"
           >
-            Login
+            Login Now
           </button>
         </div>
       </div>
     );
   }
 
-  if (hasAccess && access) {
-    const toolName = getToolName(toolId!);
-    const downloadUrl = "https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file";
-
+  // Access granted - show tokens/credentials
+  if (hasAccess && userAccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-12">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            {/* Success Header */}
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h1 className="text-4xl font-bold text-white mb-2">Access Granted! 🎉</h1>
-              <p className="text-xl text-gray-300">You have active access to {toolName}</p>
-            </div>
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="inline-flex items-center text-gray-300 hover:text-white mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 mr-2" />
+              Back to Dashboard
+            </button>
+            
+            <div className="text-6xl mb-4">{currentTool.icon}</div>
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Access Granted! 🎉
+            </h1>
+            <p className="text-xl text-gray-300">
+              You have active access to {currentTool.name}
+            </p>
+          </div>
 
-            {/* Subscription Details */}
-            <div className="bg-gray-800 rounded-lg p-6 mb-8">
-              <h3 className="text-xl font-semibold text-white mb-4">Subscription Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-gray-400">Tool</p>
-                  <p className="text-white font-medium">{access.toolName}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400">Status</p>
-                  <p className="text-green-400 font-medium">Active</p>
-                </div>
-                <div>
-                  <p className="text-gray-400">Subscribed On</p>
-                  <p className="text-white font-medium">
-                    {access.subscribedAt && typeof access.subscribedAt === 'object' && access.subscribedAt.seconds 
-                      ? new Date(access.subscribedAt.seconds * 1000).toLocaleDateString()
-                      : new Date(access.startDate || Date.now()).toLocaleDateString()
-                    }
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-400">Expires On</p>
-                  <p className="text-white font-medium">
-                    {access.expiresAt 
-                      ? new Date(access.expiresAt).toLocaleDateString()
-                      : new Date(access.endDate || Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()
-                    }
-                  </p>
-                </div>
+          {/* Subscription Info */}
+          <div className="bg-gray-800 rounded-xl p-6 mb-6">
+            <h3 className="text-xl font-semibold text-white mb-4">Subscription Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-gray-400 text-sm">Tool</p>
+                <p className="text-white font-medium">{userAccess.toolName}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Status</p>
+                <p className="text-green-400 font-medium">Active</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Expires On</p>
+                <p className="text-white font-medium">
+                  {userAccess.endDate 
+                    ? new Date(userAccess.endDate).toLocaleDateString()
+                    : 'Never'
+                  }
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* Download Section */}
-            <div className="bg-gray-800 rounded-lg p-6 mb-8">
-              <h3 className="text-xl font-semibold text-white mb-4">Download Extension</h3>
-              <p className="text-gray-300 mb-6">
-                Download the RankBlaze extension to access {toolName} and other premium tools.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4">
-                <a
-                  href={downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center"
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download Extension
-                </a>
-                
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-                >
-                  Go to Dashboard
-                </button>
-              </div>
+          {/* Extension Download */}
+          <div className="bg-gray-800 rounded-xl p-6 mb-6">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              📥 Download Extension
+            </h3>
+            <p className="text-gray-300 mb-6">
+              Download the RankBlaze extension to access {currentTool.name} and other premium tools.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <a
+                href="https://www.mediafire.com/file/4glcx3b2zjc325j/Rank+Blaze+extension+v1.002.zip/file"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                Download Extension v1.002
+              </a>
+              <a
+                href={currentTool.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+              >
+                Open {currentTool.name}
+              </a>
             </div>
+          </div>
+
+          {/* Tokens/Credentials Section */}
+          <div className="bg-gray-800 rounded-xl p-6">
+            <h3 className="text-xl font-semibold text-white mb-4">
+              🔑 {currentTool.useCredentials ? 'Login Credentials' : 'Access Tokens'}
+            </h3>
+
+            {currentTool.useCredentials ? (
+              // Show credentials for tools like Stealth Writer
+              <div className="space-y-4">
+                {credentials.id && (
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Login ID</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={credentials.id}
+                        readOnly
+                        className="bg-gray-700 text-white px-4 py-3 rounded-lg font-mono text-sm flex-1 border border-gray-600"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(credentials.id!, 'id')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors"
+                      >
+                        {copiedField === 'id' ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {credentials.password && (
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Password</label>
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={credentials.password}
+                          readOnly
+                          className="bg-gray-700 text-white px-4 py-3 rounded-lg font-mono text-sm w-full border border-gray-600"
+                        />
+                        <button
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => copyToClipboard(credentials.password!, 'password')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors"
+                      >
+                        {copiedField === 'password' ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!credentials.id && !credentials.password && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-400">No credentials available</p>
+                    <p className="text-gray-500 text-sm mt-2">Contact admin if you need access</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Show tokens for regular tools
+              <div className="space-y-4">
+                {/* Multiple tokens */}
+                {tokens.length > 0 && (
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">
+                      Available Tokens ({tokens.length})
+                    </label>
+                    <div className="space-y-2">
+                      {tokens.map((token, index) => (
+                        <div key={index} className="flex items-center space-x-2">
+                          <span className="text-gray-400 text-sm w-8">#{index + 1}</span>
+                          <input
+                            type="text"
+                            value={token}
+                            readOnly
+                            className="bg-gray-700 text-white px-4 py-3 rounded-lg font-mono text-sm flex-1 border border-gray-600"
+                          />
+                          <button
+                            onClick={() => copyToClipboard(token, 'token', index)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors"
+                          >
+                            {copiedIndex === index ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Single token */}
+                {!tokens.length && singleToken && (
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Access Token</label>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={singleToken}
+                        readOnly
+                        className="bg-gray-700 text-white px-4 py-3 rounded-lg font-mono text-sm flex-1 border border-gray-600"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(singleToken, 'single')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-colors"
+                      >
+                        {copiedField === 'single' ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* No tokens found */}
+                {!tokens.length && !singleToken && (
+                  <div className="text-center py-8">
+                    <p className="text-gray-400">No tokens available</p>
+                    <p className="text-gray-500 text-sm mt-2">Contact admin if you need access tokens</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -619,189 +559,70 @@ const ToolAccess: React.FC = () => {
   }
 
   // No access - show purchase option
-  const toolName = getToolName(toolId!);
-  const toolPrice = getToolPrice(toolId!);
-  const toolDescription = getToolDescription(toolId!);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-12">
-      <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2">{toolName}</h1>
-            <p className="text-xl text-gray-300">{toolDescription}</p>
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4">
+      <div className="max-w-md mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center text-gray-300 hover:text-white mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back to Dashboard
+          </button>
+          
+          <div className="text-6xl mb-4">{currentTool.icon}</div>
+          <h1 className="text-3xl font-bold text-white mb-2">{currentTool.name}</h1>
+          <p className="text-gray-300">{currentTool.description}</p>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 text-red-200 p-4 rounded-lg mb-6">
+            <p className="font-medium">⚠️ {error}</p>
+          </div>
+        )}
+
+        {/* Purchase Card */}
+        <div className="bg-gray-800 rounded-xl p-8 text-center">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="text-2xl">🔒</div>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Access Required</h2>
+            <p className="text-gray-300">Purchase access to use this premium tool</p>
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-500 text-white p-4 rounded-lg mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">⚠️ {error}</p>
-                  {error.includes('No transaction ID') && (
-                    <p className="text-sm mt-2 opacity-90">
-                      If you just completed a payment, please wait a moment and try refreshing the page. 
-                      The payment system may take a few seconds to process.
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => {
-                    setError('');
-                    checkUserAccess();
-                  }}
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm ml-4"
-                >
-                  Retry
-                </button>
+          <div className="mb-8">
+            <div className="text-4xl font-bold text-white mb-2">₹{currentTool.price}</div>
+            <p className="text-gray-400">One-time payment • 30 days access</p>
+          </div>
+
+          <button
+            onClick={handlePurchase}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-8 py-4 rounded-lg font-medium transition-colors w-full mb-4"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                Processing...
               </div>
-            </div>
-          )}
+            ) : (
+              <>💳 Purchase Access</>
+            )}
+          </button>
 
-          {/* Purchase Card */}
-          <div className="bg-gray-800 rounded-lg p-8 text-center">
-            <div className="mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-red-500 rounded-full mb-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m4-6V9a2 2 0 00-2-2H8a2 2 0 00-2 2v2m8 0V9a2 2 0 00-2-2H8a2 2 0 00-2 2v2" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Access Required</h2>
-              <p className="text-gray-300">You need to purchase access to use this tool</p>
-            </div>
-
-            <div className="mb-8">
-              <div className="text-4xl font-bold text-white mb-2">₹{toolPrice}</div>
-              <p className="text-gray-400">One-time payment • 30 days access</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={handlePurchase}
-                disabled={paymentLoading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center justify-center"
-              >
-                {paymentLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                    </svg>
-                    Purchase Access
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="bg-gray-600 hover:bg-gray-700 text-white px-8 py-3 rounded-lg font-medium transition-colors"
-              >
-                Go to Dashboard
-              </button>
-            </div>
-
-            <div className="mt-6 text-sm text-gray-400">
-              <p>💳 Secure payment via PhonePe</p>
-              <p>📞 24/7 support available</p>
-              <p>🔄 Instant activation after payment</p>
-            </div>
+          <div className="text-sm text-gray-400 space-y-1">
+            <p>💳 Secure payment via PhonePe</p>
+            <p>📞 24/7 support available</p>
+            <p>🔄 Instant activation after payment</p>
           </div>
         </div>
       </div>
     </div>
   );
-};
-
-// Helper functions
-const getToolName = (toolId: string): string => {
-  const toolNames: { [key: string]: string } = {
-    // Handle different formats
-    'chatgpt-plus': 'ChatGPT Plus',
-    'chatgpt_plus': 'ChatGPT Plus',
-    'chatgpt': 'ChatGPT Plus',
-    'tool_1': 'ChatGPT Plus',
-    '1': 'ChatGPT Plus',
-    
-    'envato-elements': 'Envato Elements',
-    'envato_elements': 'Envato Elements', 
-    'envato': 'Envato Elements',
-    'tool_2': 'Envato Elements',
-    '2': 'Envato Elements',
-    
-    'canva-pro': 'Canva Pro',
-    'canva_pro': 'Canva Pro',
-    'canva': 'Canva Pro',
-    'tool_3': 'Canva Pro',
-    '3': 'Canva Pro',
-    
-    'storyblocks': 'Storyblocks',
-    'tool_4': 'Storyblocks', 
-    '4': 'Storyblocks',
-    
-    'semrush': 'SEMrush',
-    'tool_5': 'SEMrush',
-    '5': 'SEMrush',
-    
-    'stealth-writer': 'Stealth Writer',
-    'stealth_writer': 'Stealth Writer',
-    'tool_19': 'Stealth Writer',
-    '19': 'Stealth Writer',
-    
-    'hix-bypass': 'Hix Bypass',
-    'hix_bypass': 'Hix Bypass',
-    'tool_20': 'Hix Bypass',
-    '20': 'Hix Bypass'
-  };
-  return toolNames[toolId] || 'Premium Tool';
-};
-
-const getToolPrice = (toolId: string): number => {
-  // Normalize tool ID to check multiple formats
-  const normalizedId = toolId.toLowerCase();
-  
-  if (normalizedId.includes('chatgpt') || normalizedId.includes('tool_1') || normalizedId === '1') {
-    return 199;
-  } else if (normalizedId.includes('envato') || normalizedId.includes('tool_2') || normalizedId === '2') {
-    return 299;
-  } else if (normalizedId.includes('canva') || normalizedId.includes('tool_3') || normalizedId === '3') {
-    return 249;
-  } else if (normalizedId.includes('story') || normalizedId.includes('tool_4') || normalizedId === '4') {
-    return 399;
-  } else if (normalizedId.includes('semrush') || normalizedId.includes('tool_5') || normalizedId === '5') {
-    return 499;
-  } else if (normalizedId.includes('stealth') || normalizedId.includes('tool_19') || normalizedId === '19') {
-    return 199;
-  } else if (normalizedId.includes('hix') || normalizedId.includes('bypass') || normalizedId.includes('tool_20') || normalizedId === '20') {
-    return 149;
-  }
-  return 199; // Default price
-};
-
-const getToolDescription = (toolId: string): string => {
-  // Normalize tool ID to check multiple formats
-  const normalizedId = toolId.toLowerCase();
-  
-  if (normalizedId.includes('chatgpt') || normalizedId.includes('tool_1') || normalizedId === '1') {
-    return 'Access to ChatGPT Plus with GPT-4 and advanced features';
-  } else if (normalizedId.includes('envato') || normalizedId.includes('tool_2') || normalizedId === '2') {
-    return 'Unlimited downloads from Envato Elements library';
-  } else if (normalizedId.includes('canva') || normalizedId.includes('tool_3') || normalizedId === '3') {
-    return 'Professional design tools and premium templates';
-  } else if (normalizedId.includes('story') || normalizedId.includes('tool_4') || normalizedId === '4') {
-    return 'Unlimited stock videos, audio, and images';
-  } else if (normalizedId.includes('semrush') || normalizedId.includes('tool_5') || normalizedId === '5') {
-    return 'Complete SEO and digital marketing toolkit';
-  } else if (normalizedId.includes('stealth') || normalizedId.includes('tool_19') || normalizedId === '19') {
-    return 'AI content writer that bypasses detection';
-  } else if (normalizedId.includes('hix') || normalizedId.includes('bypass') || normalizedId.includes('tool_20') || normalizedId === '20') {
-    return 'Bypass AI detection for your content';
-  }
-  return 'Premium tool access'; // Default description
 };
 
 export default ToolAccess;

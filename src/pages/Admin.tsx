@@ -1,12 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, CreditCard, Activity, BarChart3, UserPlus, Key, Trash2, Eye, Lock, Unlock } from 'lucide-react';
-import { auth, db, firestore } from '../config/firebase';
+import { auth, db } from '../config/firebase';
 import { ref, onValue, update, set, remove, get } from 'firebase/database';
 import { createUserWithEmailAndPassword, deleteUser, updatePassword } from 'firebase/auth';
 import { useToast } from '../context/ToastContext';
 import { clearSessionData } from '../utils/securityUtils';
-import { doc, setDoc } from 'firebase/firestore';
 import AdminSidebar from '../components/ui/AdminSidebar';
 
 interface User {
@@ -227,8 +226,8 @@ const Admin = () => {
       
       // Create a request for Firebase Auth user deletion
       // This should be handled by a Cloud Function for security
-      const deleteRequest = doc(firestore, 'userDeletionRequests', userId);
-      await setDoc(deleteRequest, {
+      const deleteRequest = ref(db, `userDeletionRequests/${userId}`);
+      await set(deleteRequest, {
         userId: userId,
         requestedBy: 'admin',
         requestedAt: new Date().toISOString(),
@@ -258,10 +257,10 @@ const Admin = () => {
       const userEmail = userSnapshot.val().email;
       
       // For security reasons, we should use Firebase Admin SDK on the server
-      // But as a workaround, we'll create a special document in Firestore that a Cloud Function can monitor
+      // But as a workaround, we'll create a special document in Realtime Database that a Cloud Function can monitor
       // to perform the password change securely
-      const passwordChangeRequest = doc(firestore, 'passwordChangeRequests', selectedUserId);
-      await setDoc(passwordChangeRequest, {
+      const passwordChangeRequest = ref(db, `passwordChangeRequests/${selectedUserId}`);
+      await set(passwordChangeRequest, {
         userId: selectedUserId,
         email: userEmail,
         newPassword: newPassword, // Note: In production, you should encrypt this or use a more secure method
@@ -509,8 +508,8 @@ const Admin = () => {
       
       // Request account disable/enable in Firebase Auth
       // This should be handled by a Cloud Function for security
-      const toggleRequest = doc(firestore, 'accountStatusRequests', userId);
-      await setDoc(toggleRequest, {
+      const toggleRequest = ref(db, `accountStatusRequests/${userId}`);
+      await set(toggleRequest, {
         userId: userId,
         requestedStatus: !currentStatus ? 'disabled' : 'enabled',
         requestedBy: 'admin',

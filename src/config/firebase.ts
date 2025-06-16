@@ -1,9 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 import { getAnalytics } from 'firebase/analytics';
-import { getDatabase } from 'firebase/database';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { getDatabase, ref, set, get } from 'firebase/database';
 import { siteConfig } from './site';
 import { getFunctions } from 'firebase/functions';
 
@@ -24,13 +22,12 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize services after app initialization
 const auth = getAuth(app);
-const firestore = getFirestore(app);
 const db = getDatabase(app);
 const functions = getFunctions(app);
 // Only initialize analytics in browser environment
 const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
-// Initialize collections
+// Initialize collections paths for Realtime Database
 const collections = {
   users: 'users',
   adminUsers: 'admin_users',
@@ -41,7 +38,7 @@ const collections = {
   siteSettings: 'site_settings'
 };
 
-// Initialize admin user with improved error handling
+// Initialize admin user with improved error handling using Realtime Database
 const initializeAdmin = async () => {
   try {
     // Skip admin initialization in development environment
@@ -53,11 +50,12 @@ const initializeAdmin = async () => {
 
     const adminEmail = siteConfig.contact.email;
     
-    // Check if admin document exists first
-    const adminSnapshot = await getDoc(doc(firestore, collections.adminUsers, 'admin'));
+    // Check if admin document exists first in Realtime Database
+    const adminRef = ref(db, `${collections.adminUsers}/admin`);
+    const adminSnapshot = await get(adminRef);
     
     if (!adminSnapshot.exists()) {
-      await setDoc(doc(firestore, collections.adminUsers, 'admin'), {
+      await set(adminRef, {
         email: adminEmail,
         name: 'Admin',
         isAdmin: true,
@@ -66,23 +64,24 @@ const initializeAdmin = async () => {
         permissions: ['all'],
         domain: siteConfig.url
       });
-      console.log('Admin user data created');
+      console.log('Admin user data created in Realtime Database');
     } else {
-      console.log('Admin user already exists');
+      console.log('Admin user already exists in Realtime Database');
     }
 
-    // Initialize site settings if they don't exist
-    const siteSettingsSnapshot = await getDoc(doc(firestore, collections.siteSettings, 'general'));
+    // Initialize site settings if they don't exist in Realtime Database
+    const siteSettingsRef = ref(db, `${collections.siteSettings}/general`);
+    const siteSettingsSnapshot = await get(siteSettingsRef);
     
     if (!siteSettingsSnapshot.exists()) {
-      await setDoc(doc(firestore, collections.siteSettings, 'general'), {
+      await set(siteSettingsRef, {
         siteName: siteConfig.name,
         siteDescription: siteConfig.description,
         siteUrl: siteConfig.url,
         lastUpdated: new Date().toISOString(),
         updatedBy: 'system'
       });
-      console.log('Site settings created');
+      console.log('Site settings created in Realtime Database');
     }
   } catch (error) {
     console.error('Error with admin initialization:', error);
@@ -91,12 +90,12 @@ const initializeAdmin = async () => {
 
 // Initialize admin only after auth state is ready and only in browser environment
 if (typeof window !== 'undefined') {
-  auth.onAuthStateChanged((user) => {
+  auth.onAuthStateChanged((user: any) => {
     if (user) {
       initializeAdmin();
     }
   });
 }
 
-export { collections, auth, firestore, analytics, db, functions };
+export { collections, auth, analytics, db, functions };
 export default app;

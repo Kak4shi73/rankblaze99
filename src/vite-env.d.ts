@@ -78,7 +78,7 @@ declare module 'lucide-react' {
 
 declare module 'firebase/auth';
 declare module 'firebase/database';
-declare module 'firebase/firestore';
+declare module 'firebase/functions';
 
 // Add declarations for lucide-react icon modules
 declare module 'lucide-react/dist/esm/icons/check' {

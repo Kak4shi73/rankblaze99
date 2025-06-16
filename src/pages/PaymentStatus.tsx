@@ -1,10 +1,9 @@
-import * as React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { RefreshCw, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { verifyPaymentStatus } from '../utils/payment';
-import { Check, X } from 'lucide-react';
-import { firestore, db } from '../config/firebase';
-import { updateDoc, doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, get } from 'firebase/database';
+import { db } from '../config/firebase';
+import { ref, push } from 'firebase/database';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 

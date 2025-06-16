@@ -1,15 +1,13 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { verifyAndGrantAccess, autoVerifyAndProcessPayment } from '../utils/payment';
 import Check from 'lucide-react/dist/esm/icons/check';
 import X from 'lucide-react/dist/esm/icons/x';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
-import { firestore, db } from '../config/firebase';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
-import { ref, get } from 'firebase/database';
+import { db } from '../config/firebase';
+import { ref, get, set, push } from 'firebase/database';
 import { useAuth } from '../context/AuthContext';
-import { debugTransactionId, storeTransactionId } from '../utils/paymentDebug';
+import { verifyAndGrantAccess, autoVerifyAndProcessPayment } from '../utils/payment';
 
 interface ToolItem {
   id: string;
@@ -130,10 +128,10 @@ const PaymentSuccess = () => {
           
           if (userId === user.uid) {
             // Check if user already has access to this tool
-            const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
-            const userToolDoc = await getDoc(userToolRef);
+            const userToolRef = ref(db, `users/${userId}/tools/${toolId}`);
+            const userToolSnapshot = await get(userToolRef);
             
-            if (userToolDoc.exists()) {
+            if (userToolSnapshot.exists()) {
               console.log('User already has access to this tool');
               setPurchasedTools([{ id: toolId, name: 'Your Tool' }]);
               setStatus('success');
@@ -141,15 +139,15 @@ const PaymentSuccess = () => {
             }
             
             // Create a transaction record for manual verification
-            const txnRef = doc(firestore, 'transactions', transactionId);
-            await setDoc(txnRef, {
+            const txnRef = ref(db, `transactions/${transactionId}/verification`);
+            await set(txnRef, {
               userId,
               toolId,
               status: 'pending_verification',
               merchantTransactionId: transactionId,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            }, { merge: true });
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            });
             
             // Try to grant access directly as a fallback
             try {
@@ -174,51 +172,47 @@ const PaymentSuccess = () => {
   // Helper function to fetch tools from transaction data
   const fetchToolsFromTransaction = async (transactionId: string) => {
     // Check Realtime Database
-    const transactionRef = ref(db, `transactions/${transactionId}`);
-    const snapshot = await get(transactionRef);
+    const transactionRef = ref(db, `transactions/${transactionId}/tools`);
+    const transactionSnapshot = await get(transactionRef);
     
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      if (data.tools && Array.isArray(data.tools)) {
-        setPurchasedTools(data.tools);
-        return;
-      }
-      if (data.toolId) {
-        setPurchasedTools([{ id: data.toolId, name: data.toolName || 'Tool' }]);
+    if (transactionSnapshot.exists()) {
+      const data = transactionSnapshot.val();
+      if (data && Array.isArray(data)) {
+        setPurchasedTools(data);
         return;
       }
     }
     
-    // Check Firestore
-    const purchaseRef = doc(firestore, 'user_purchases', transactionId);
-    const purchaseSnapshot = await getDoc(purchaseRef);
+    // Check Realtime Database
+    const purchaseRef = ref(db, `transactions/${transactionId}/purchase/tools`);
+    const purchaseSnapshot = await get(purchaseRef);
     
     if (purchaseSnapshot.exists()) {
-      const purchaseData = purchaseSnapshot.data();
-      if (purchaseData.tools && Array.isArray(purchaseData.tools)) {
-        setPurchasedTools(purchaseData.tools as ToolItem[]);
+      const purchaseData = purchaseSnapshot.val();
+      if (purchaseData && Array.isArray(purchaseData)) {
+        setPurchasedTools(purchaseData);
         return;
       }
     }
     
-    // Check transactions collection
-    const transactionDocRef = doc(firestore, 'transactions', transactionId);
-    const transactionDoc = await getDoc(transactionDocRef);
+    // Check Realtime Database
+    const transactionDocRef = ref(db, `transactions/${transactionId}/tool`);
+    const transactionDocSnapshot = await get(transactionDocRef);
     
-    if (transactionDoc.exists()) {
-      const transactionData = transactionDoc.data();
+    if (transactionDocSnapshot.exists()) {
+      const transactionData = transactionDocSnapshot.val();
       if (transactionData.toolId) {
         // Get tool name from tools collection if possible
         try {
-          const toolDocRef = doc(firestore, 'tools', transactionData.toolId);
-          const toolDoc = await getDoc(toolDocRef);
+          const toolRef = ref(db, `tools/${transactionData.toolId}/name`);
+          const toolSnapshot = await get(toolRef);
           
-          if (toolDoc.exists()) {
-            const toolData = toolDoc.data();
-            setPurchasedTools([{ 
-              id: transactionData.toolId, 
-              name: toolData.name || 'Tool' 
-            }]);
+          if (toolSnapshot.exists()) {
+            const toolData = {
+              id: transactionData.toolId,
+              name: toolSnapshot.val() || 'Tool'
+            };
+            setPurchasedTools([toolData]);
           } else {
             setPurchasedTools([{ 
               id: transactionData.toolId, 
@@ -240,19 +234,14 @@ const PaymentSuccess = () => {
   const grantToolAccess = async (userId: string, toolId: string) => {
     try {
       // Add tool to user's tools collection
-      const userToolRef = doc(firestore, 'users', userId, 'tools', toolId);
-      await setDoc(userToolRef, {
-        activatedAt: serverTimestamp(),
-        toolId,
-        source: 'direct_activation'
-      });
+      const userToolRef = ref(db, `users/${userId}/tools/${toolId}/activatedAt`);
+      await set(userToolRef, Date.now());
+      const userToolSourceRef = ref(db, `users/${userId}/tools/${toolId}/source`);
+      await set(userToolSourceRef, 'direct_activation');
 
       // Also update the user's tools array for backward compatibility
-      const userRef = doc(firestore, 'users', userId);
-      await updateDoc(userRef, {
-        tools: arrayUnion(toolId),
-        updatedAt: serverTimestamp()
-      });
+      const userRef = ref(db, `users/${userId}/tools`);
+      await push(userRef, toolId);
       
       console.log(`Successfully granted access to tool ${toolId} for user ${userId}`);
       return true;
@@ -319,7 +308,7 @@ const PaymentSuccess = () => {
                           onClick={() => navigate(`/tool-access/${tool.id}`)}
                           className="flex items-center text-sm bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md transition-colors"
                         >
-                          Access Tool <ArrowRight className="ml-2 w-4 h-4" />
+                          Access Tool <ArrowLeft className="ml-2 w-4 h-4" />
                         </button>
                       </li>
                     ))}
@@ -343,7 +332,7 @@ const PaymentSuccess = () => {
           {status === 'failed' && (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                <X className="w-10 h-10 text-white" />
+                <Check className="w-10 h-10 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-white mb-4">Activation Failed</h2>
               <p className="text-gray-300 mb-6">{errorMessage}</p>
