@@ -144,6 +144,29 @@ const ToolAccess: React.FC = () => {
     try {
       console.log(`DEBUG - Attempting to fetch token for ${toolId}`);
       
+      // First try to get tokens from Firestore (new method)
+      try {
+        const { getTokensForTool } = await import('../utils/adminFirestore.js');
+        const tokenInfo = await getTokensForTool(toolId);
+        
+        if (tokenInfo.available) {
+          console.log(`Found tokens in Firestore for ${toolId}:`, tokenInfo);
+          
+          if (tokenInfo.type === 'credentials') {
+            setToolLoginId(tokenInfo.loginId);
+            setToolPassword(tokenInfo.password);
+          } else if (tokenInfo.type === 'token') {
+            setToolToken(tokenInfo.token);
+          }
+          
+          setIsLoading(false);
+          return;
+        }
+      } catch (firestoreError) {
+        console.log('Firestore token fetch failed, falling back to Realtime Database:', firestoreError);
+      }
+      
+      // Fallback to Realtime Database method
       // Special handling for Stealth Writer which uses ID/Password
       if (toolId === 'stealth_writer' || toolId === 'tool_19') {
         // First try the direct path in toolTokens

@@ -1522,4 +1522,12 @@ export {
   migrateAdminActivatedTools,
   checkUserMigratedTools,
   migrateSpecificUserTools
-} from './migrate-admin-tools'; 
+} from './migrate-admin-tools';
+
+// Admin Firestore functions
+export {
+  adminGrantTool,
+  updateToolTokens,
+  getToolTokens,
+  syncTokensToFirestore
+} from './admin-firestore'; 
