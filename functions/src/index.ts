@@ -1333,114 +1333,56 @@ async function handlePhonePeWebhook(req: any, res: any) {
     if (state === 'COMPLETED') {
       console.log('✅ Payment completed for:', merchantTransactionId);
 
-      // Find the order in Firestore
-      const firestore = admin.firestore();
-      const ordersSnapshot = await firestore.collection('orders')
-        .where('merchantTransactionId', '==', merchantTransactionId)
-        .get();
-
-      if (ordersSnapshot.empty) {
-        console.error('❌ Order not found for merchantTransactionId:', merchantTransactionId);
-        res.status(404).send('Order not found');
+      // Extract userId and toolId from merchantTransactionId 
+      // Format: {userId}_{toolId}_{timestamp}
+      const merchantParts = merchantTransactionId.split('_');
+      if (merchantParts.length < 3) {
+        console.error('❌ Invalid merchantTransactionId format:', merchantTransactionId);
+        res.status(400).send('Invalid transaction ID format');
         return;
       }
+      
+      const userId = merchantParts[0];
+      const toolId = merchantParts[1];
 
-      const orderDoc = ordersSnapshot.docs[0];
-      const orderData = orderDoc.data();
-      const { userId, toolId, toolName } = orderData;
-
-      // Step 4: Activate subscription in Firestore
-      const subscriptionId = `${userId}_${toolId}`;
+      // Create subscription in Realtime Database (original method)
+      const database = admin.database();
+      const toolName = getToolName(toolId);
+      const subscriptionRef = database.ref(`subscriptions/${userId}/${toolId}`);
+      
       const subscriptionData = {
-        userId,
         toolId,
         toolName,
-        orderId: orderDoc.id,
+        isActive: true,
+        startDate: Date.now(),
+        endDate: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+        paymentMethod: 'PhonePe',
         transactionId,
         merchantTransactionId,
-        amount: amount / 100, // Convert to rupees
-        isActive: true,
-        subscribedAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        amount: amount / 100
       };
 
-      // Create subscription
-      await firestore.collection('subscriptions').doc(subscriptionId).set(subscriptionData);
-      console.log('✅ Subscription created in Firestore:', subscriptionId);
+      await subscriptionRef.set(subscriptionData);
+      console.log('✅ Subscription created in Realtime Database');
 
-      // Update order status
-      await firestore.collection('orders').doc(orderDoc.id).update({
-        paymentStatus: 'completed',
-        transactionId,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        subscriptionId,
-        webhookResponse: decodedResponse
-      });
-      console.log('✅ Order updated as completed');
-
-      // Update user's active subscriptions
-      const userRef = firestore.collection('users').doc(userId);
-      const userDoc = await userRef.get();
-      
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        const activeSubscriptions = userData?.activeSubscriptions || [];
-        
-        if (!activeSubscriptions.includes(toolId)) {
-          activeSubscriptions.push(toolId);
-        }
-
-        await userRef.update({
-          activeSubscriptions,
-          totalSpent: (userData?.totalSpent || 0) + (amount / 100),
-          lastPurchase: {
-            toolId,
-            toolName,
-            amount: amount / 100,
-            date: admin.firestore.FieldValue.serverTimestamp()
-          },
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        console.log('✅ User updated with new subscription');
-      }
-
-      // Create payment record
-      await firestore.collection('payments').add({
+      // Also create payment record in Realtime Database
+      const paymentRef = database.ref('payments').push();
+      await paymentRef.set({
         userId,
         toolId,
         toolName,
-        orderId: orderDoc.id,
         transactionId,
         merchantTransactionId,
         amount: amount / 100,
         status: 'completed',
         paymentMethod: 'PhonePe',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        webhookData: decodedResponse
+        createdAt: Date.now()
       });
-      console.log('✅ Payment record created');
+      console.log('✅ Payment record created in Realtime Database');
 
       res.status(200).send('SUCCESS');
     } else {
       console.log('❌ Payment failed or pending:', state);
-      
-      // Update order with failed status
-      const firestore = admin.firestore();
-      const ordersSnapshot = await firestore.collection('orders')
-        .where('merchantTransactionId', '==', merchantTransactionId)
-        .get();
-
-      if (!ordersSnapshot.empty) {
-        const orderDoc = ordersSnapshot.docs[0];
-        await firestore.collection('orders').doc(orderDoc.id).update({
-          paymentStatus: 'failed',
-          failedAt: admin.firestore.FieldValue.serverTimestamp(),
-          webhookResponse: decodedResponse
-        });
-      }
-
       res.status(200).send('FAILED');
     }
 
@@ -1472,42 +1414,12 @@ import {
   createPhonePeSdkOrder 
 } from './phone-pe-payment';
 
-// Import payment fix functions
-import {
-  fixPaymentAndGrantTools,
-  bulkFixPayments,
-  checkAndFixPayment
-} from './payment-fix';
-
-// Import subscription fix functions
-import {
-  createSubscriptionAfterPayment,
-  fixMissingSubscriptions,
-  verifyPaymentAndCreateSubscription
-} from './subscription-fix';
-
-// Essential exports for the new Firestore system
+// Export PhonePe payment functions
 export { 
   initializePhonePePayment,
   verifyPhonePePayment,
-  phonePeWebhookFirestore,
-  getUserSubscriptions,
-  checkToolAccess,
-  migrateToFirestore
-} from './firestore-payment';
-
-// Migration and fix functions (for maintenance)
-export { 
-  fixPaymentAndGrantTools, 
-  bulkFixPayments, 
-  checkAndFixPayment 
-} from './payment-fix';
-
-export { 
-  createSubscriptionAfterPayment, 
-  fixMissingSubscriptions, 
-  verifyPaymentAndCreateSubscription 
-} from './subscription-fix';
+  createPhonePeSdkOrder
+};
 
 // Admin setup and authentication functions
 export { 
@@ -1515,19 +1427,4 @@ export {
   initializeAdmin, 
   checkAdminStatus, 
   refreshUserToken 
-};
-
-// Migration functions for admin-activated tools
-export { 
-  migrateAdminActivatedTools,
-  checkUserMigratedTools,
-  migrateSpecificUserTools
-} from './migrate-admin-tools';
-
-// Admin Firestore functions
-export {
-  adminGrantTool,
-  updateToolTokens,
-  getToolTokens,
-  syncTokensToFirestore
-} from './admin-firestore'; 
+}; 
