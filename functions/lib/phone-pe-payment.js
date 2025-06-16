@@ -46,7 +46,7 @@ exports.initializePhonePePayment = functions.https.onRequest(async (req, res) =>
         const client = getPhonePeClient();
         const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
         // Build the redirect URL to include the transaction ID as a query parameter
-        const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+        const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
         console.log(`Initializing payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
         console.log(`Using redirectUrl: ${redirectUrl}`);
         const request = pg_sdk_node_1.StandardCheckoutPayRequest.builder()
@@ -429,7 +429,7 @@ exports.createPhonePeSdkOrder = functions.https.onRequest(async (req, res) => {
         const client = getPhonePeClient();
         const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
         // Build the redirect URL to include the transaction ID as a query parameter
-        const redirectUrl = `https://www.rankblaze.in/payment-callback?merchantTransactionId=${merchantOrderId}`;
+        const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
         console.log(`Initializing SDK payment for user ${userId}, toolId ${toolId}, amount ${amount}`);
         console.log(`Using redirectUrl: ${redirectUrl}`);
         const request = pg_sdk_node_1.CreateSdkOrderRequest.StandardCheckoutBuilder()

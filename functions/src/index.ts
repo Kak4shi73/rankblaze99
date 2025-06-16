@@ -1515,4 +1515,11 @@ export {
   initializeAdmin, 
   checkAdminStatus, 
   refreshUserToken 
-}; 
+};
+
+// Migration functions for admin-activated tools
+export { 
+  migrateAdminActivatedTools,
+  checkUserMigratedTools,
+  migrateSpecificUserTools
+} from './migrate-admin-tools'; 

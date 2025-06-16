@@ -1,7 +1,7 @@
 "use strict";
 var _a, _b, _c, _d, _e, _f, _g, _h;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyPaymentAndCreateSubscription = exports.fixMissingSubscriptions = exports.createSubscriptionAfterPayment = exports.checkAndFixPayment = exports.bulkFixPayments = exports.fixPaymentAndGrantTools = exports.migrateToFirestore = exports.checkToolAccess = exports.getUserSubscriptions = exports.phonePeWebhookFirestore = exports.verifyPhonePePayment = exports.initializePhonePePayment = exports.api = exports.getToolSession = exports.chatbotResponse = exports.sendOTPEmail = void 0;
+exports.refreshUserToken = exports.checkAdminStatus = exports.initializeAdmin = exports.setAdminClaims = exports.verifyPaymentAndCreateSubscription = exports.fixMissingSubscriptions = exports.createSubscriptionAfterPayment = exports.checkAndFixPayment = exports.bulkFixPayments = exports.fixPaymentAndGrantTools = exports.migrateToFirestore = exports.checkToolAccess = exports.getUserSubscriptions = exports.phonePeWebhookFirestore = exports.verifyPhonePePayment = exports.initializePhonePePayment = exports.api = exports.getToolSession = exports.chatbotResponse = exports.sendOTPEmail = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
@@ -9,6 +9,12 @@ const cors = require("cors");
 const crypto = require("crypto-js");
 const express = require("express");
 const node_fetch_1 = require("node-fetch");
+// Import admin setup functions
+const admin_setup_1 = require("./admin-setup");
+Object.defineProperty(exports, "setAdminClaims", { enumerable: true, get: function () { return admin_setup_1.setAdminClaims; } });
+Object.defineProperty(exports, "initializeAdmin", { enumerable: true, get: function () { return admin_setup_1.initializeAdmin; } });
+Object.defineProperty(exports, "checkAdminStatus", { enumerable: true, get: function () { return admin_setup_1.checkAdminStatus; } });
+Object.defineProperty(exports, "refreshUserToken", { enumerable: true, get: function () { return admin_setup_1.refreshUserToken; } });
 // Initialize Firebase admin SDK
 admin.initializeApp();
 // Create a nodemailer transport
@@ -356,7 +362,7 @@ app.post('/initializePhonePePayment', async (req, res) => {
         const isProduction = process.env.NODE_ENV === 'production';
         // Generate a unique merchant order ID
         const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-        const redirectUrl = "https://www.rankblaze.in/payment-callback";
+        const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
         console.log("🔄 Creating order in database before payment initialization...");
         try {
             const db = admin.firestore();
@@ -678,7 +684,7 @@ app.post('/createPhonePeSdkOrder', async (req, res) => {
         const clientVersion = 1;
         const isProduction = process.env.NODE_ENV === 'production';
         const merchantOrderId = `ord_${userId}_${toolId}_${Date.now()}`;
-        const redirectUrl = "https://www.rankblaze.in/payment-callback";
+        const redirectUrl = `https://www.rankblaze.in/payment-success?txnId=${merchantOrderId}`;
         try {
             // Load the SDK dynamically
             const sdkModule = require('pg-sdk-node');

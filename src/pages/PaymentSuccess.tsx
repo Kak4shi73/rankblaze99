@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { verifyAndGrantAccess, autoVerifyAndProcessPayment } from '../utils/payment';
 import Check from 'lucide-react/dist/esm/icons/check';
 import X from 'lucide-react/dist/esm/icons/x';
 import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
 import { firestore, db } from '../config/firebase';
-import { doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { ref, get } from 'firebase/database';
 import { useAuth } from '../context/AuthContext';
+import { debugTransactionId, storeTransactionId } from '../utils/paymentDebug';
 
 interface ToolItem {
   id: string;
@@ -34,30 +36,15 @@ const PaymentSuccess = () => {
     // Log all query parameters for debugging
     console.log('Payment success page received params:', Object.fromEntries(queryParams.entries()));
     
-    // Check for multiple possible parameter names that PhonePe might use
-    let merchantTransactionId = 
-      queryParams.get('merchantTransactionId') || 
-      queryParams.get('transactionId') || 
-      queryParams.get('merchantOrderId') ||
-      queryParams.get('txnId') ||
-      queryParams.get('providerReferenceId');
+    // Use debug utility to get transaction ID from all possible sources
+    const txnDebug = debugTransactionId();
+    let merchantTransactionId = txnDebug.finalTxnId;
     
-    console.log('Extracted transaction ID from URL:', merchantTransactionId);
+    console.log('Transaction ID debug info:', txnDebug);
     
-    // If no transaction ID in URL, check sessionStorage
-    if (!merchantTransactionId) {
-      console.log('No transaction ID in URL, checking sessionStorage');
-      merchantTransactionId = sessionStorage.getItem('merchantTransactionId') || 
-                              sessionStorage.getItem('lastTransactionId');
-      
-      console.log('Transaction ID from sessionStorage:', merchantTransactionId);
-    }
-    
-    // Store any transaction ID from URL in sessionStorage immediately
+    // Store transaction ID if found
     if (merchantTransactionId) {
-      console.log('Storing transaction ID in sessionStorage:', merchantTransactionId);
-      sessionStorage.setItem('merchantTransactionId', merchantTransactionId);
-      sessionStorage.setItem('lastTransactionId', merchantTransactionId);
+      storeTransactionId(merchantTransactionId);
       
       setOrderId(merchantTransactionId);
       
@@ -382,7 +369,7 @@ const PaymentSuccess = () => {
                   Go to Dashboard
                 </button>
                 <a 
-                  href="https://wa.me/+918010585959?text=I%20need%20help%20with%20my%20payment.%20Order%20ID:%20"
+                  href="https://wa.me/+91 7071920835?text=I%20need%20help%20with%20my%20payment.%20Order%20ID:%20"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-md transition-colors"
